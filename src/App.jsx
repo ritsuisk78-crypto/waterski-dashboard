@@ -1,4 +1,73 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SUPABASE CLIENT
+// ─────────────────────────────────────────────────────────────────────────────
+const SUPABASE_URL = "https://scoggdtvfvkecudbxztw.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNjb2dnZHR2ZnZrZWN1ZGJ4enR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA5NDQ1NjUsImV4cCI6MjA5NjUyMDU2NX0.2NLXTp2rO-4NWU3vlEbLhzKoeqH5MMrxMcsWUPuojOM";
+
+async function sbFetch(path, options = {}) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    ...options,
+    headers: {
+      "apikey": SUPABASE_ANON_KEY,
+      "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+  if (!res.ok) { const e = await res.text(); throw new Error(e); }
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
+async function loadAllScores(initialData) {
+  try {
+    const rows = await sbFetch("scores?select=*");
+    const data = JSON.parse(JSON.stringify(initialData));
+    for (const row of rows || []) {
+      const { gender, event, school, skier_index, name, planned, actual } = row;
+      if (data[gender]?.[event]?.[school]?.[skier_index] !== undefined) {
+        data[gender][event][school][skier_index] = {
+          name: name || "", planned: planned || "", actual: actual || ""
+        };
+      }
+    }
+    return data;
+  } catch(e) { console.error("loadAllScores error", e); return initialData; }
+}
+
+async function saveSkier(gender, event, school, idx, skier) {
+  try {
+    await sbFetch("scores?on_conflict=gender,event,school,skier_index", {
+      method: "POST",
+      headers: { "Prefer": "resolution=merge-duplicates" },
+      body: JSON.stringify({
+        gender, event, school, skier_index: idx,
+        name: skier.name, planned: skier.planned, actual: skier.actual,
+        updated_at: new Date().toISOString(),
+      }),
+    });
+  } catch(e) { console.error("saveSkier error", e); }
+}
+
+async function loadConfig() {
+  try {
+    const rows = await sbFetch("app_config?select=*");
+    if (rows && rows.length > 0) return JSON.parse(rows[0].value);
+  } catch {}
+  return null;
+}
+
+async function saveConfig(config) {
+  try {
+    await sbFetch("app_config?on_conflict=key", {
+      method: "POST",
+      headers: { "Prefer": "resolution=merge-duplicates" },
+      body: JSON.stringify({ key: "config", value: JSON.stringify(config) }),
+    });
+  } catch(e) { console.error("saveConfig error", e); }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -250,7 +319,7 @@ function PlayerPopup({ gender, school, event, mode, config, data, onClose }) {
       }}>
         <div style={{ width: 36, height: 4, background: C.border, borderRadius: 2, margin: "0 auto 16px" }} />
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-          <span style={{ fontSize: 22 }}>{ecfg.icon}</span>
+          
           <div>
             <div style={{ fontSize: 16, fontWeight: 700, color: ecfg.color }}>{ecfg.label}</div>
             <div style={{ fontSize: 12, color: C.muted }}>{school}　{cfg.topN}人どり</div>
@@ -335,8 +404,7 @@ function PlayerPopup({ gender, school, event, mode, config, data, onClose }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // SETTINGS TAB
 // ─────────────────────────────────────────────────────────────────────────────
-function SettingsTab({ config, setConfig, onReset }) {
-  const [gender, setGender] = useState("men");
+function SettingsTab({ config, setConfig, onReset, gender }) {
   const cfg = config[gender];
 
   const update = (field, val) => {
@@ -354,8 +422,6 @@ function SettingsTab({ config, setConfig, onReset }) {
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
-      <GenderToggle gender={gender} onChange={setGender} />
-
       {/* ピン想定 */}
       <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: cfg.color, marginBottom: 12 }}>
@@ -364,7 +430,7 @@ function SettingsTab({ config, setConfig, onReset }) {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
           {EVENTS.map(e => (
             <div key={e}>
-              <div style={{ fontSize: 10, color: ECFG[e].color, marginBottom: 4 }}>{ECFG[e].icon} {ECFG[e].label}（{ECFG[e].unit}）</div>
+              <div style={{ fontSize: 10, color: ECFG[e].color, marginBottom: 4 }}>{ECFG[e].label}（{ECFG[e].unit}）</div>
               <NumField
                 value={cfg.pin[e]}
                 onChange={v => updatePin(e, v)}
@@ -421,8 +487,7 @@ function SettingsTab({ config, setConfig, onReset }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // INPUT TAB
 // ─────────────────────────────────────────────────────────────────────────────
-function InputTab({ config, data, setData }) {
-  const [gender, setGender] = useState("men");
+function InputTab({ config, data, setData, gender, saveSkierDebounced }) {
   const [event,  setEvent]  = useState("slalom");
   const [school, setSchool] = useState("慶應");
 
@@ -435,17 +500,17 @@ function InputTab({ config, data, setData }) {
       const updated = prev[gender][event][school].map((sk, i) =>
         i === idx ? { ...sk, [field]: val } : sk
       );
+      const newSkier = updated[idx];
+      saveSkierDebounced(gender, event, school, idx, newSkier);
       return {
         ...prev,
         [gender]: { ...prev[gender], [event]: { ...prev[gender][event], [school]: updated } },
       };
     });
-  }, [gender, event, school, setData]);
+  }, [gender, event, school, setData, saveSkierDebounced]);
 
   return (
     <div>
-      <GenderToggle gender={gender} onChange={g => { setGender(g); setSchool("慶應"); }} />
-
       {/* 種目選択 */}
       <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
         {EVENTS.map(e => {
@@ -463,8 +528,7 @@ function InputTab({ config, data, setData }) {
               fontSize: 13, fontWeight: event === e ? 700 : 400,
               padding: "10px 6px", cursor: "pointer", textAlign: "center",
             }}>
-              <div style={{ fontSize: 20, marginBottom: 2 }}>{c.icon}</div>
-              <div style={{ marginBottom: 4 }}>{c.short}</div>
+              <div style={{ marginBottom: 4, fontSize: 12 }}>{c.label}</div>
               <MiniProgress filled={f} total={t} color={c.color} />
             </button>
           );
@@ -498,7 +562,7 @@ function InputTab({ config, data, setData }) {
       {/* 進捗バー */}
       <div style={{ background: C.surface, border: `1px solid ${ecfg.color}33`, borderRadius: 10, padding: "10px 14px", marginBottom: 14 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-          <span style={{ fontSize: 12, color: ecfg.color, fontWeight: 700 }}>{ecfg.icon} {ecfg.label}　{school}</span>
+          <span style={{ fontSize: 12, color: ecfg.color, fontWeight: 700 }}>{ecfg.label}　{school}</span>
           <MiniProgress filled={skiers.filter(sk => sk.actual !== "").length} total={skiers.length} color={ecfg.color} />
         </div>
         <div style={{ height: 4, background: C.bg, borderRadius: 2, overflow: "hidden" }}>
@@ -510,7 +574,7 @@ function InputTab({ config, data, setData }) {
         </div>
         {event === "jump" && (
           <div style={{ fontSize: 10, color: C.jump, marginTop: 6 }}>
-            ※ ハンデ -{cfg.handicap}m を引いて換算点を計算します
+            ※ Jハンデ -{cfg.handicap}m を引いて換算点を計算します
           </div>
         )}
       </div>
@@ -609,7 +673,7 @@ function DiffTables({ gender, schoolResults, config, completedEvents }) {
     <div style={{ display: "grid", gap: 12 }}>
       {/* 総合 */}
       <div style={{ background: C.surface, border: `1px solid ${C.accent}33`, borderRadius: 12, overflow: "hidden" }}>
-        <SectionHeader title="🏆 総合　慶應 vs 各校" color={C.accent} />
+        <SectionHeader title="総合　慶應 vs 各校" color={C.accent} />
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
           <thead>
             <tr style={{ background: C.bg, borderBottom: `1px solid ${C.border}` }}>
@@ -620,7 +684,7 @@ function DiffTables({ gender, schoolResults, config, completedEvents }) {
                 const done = completedEvents.includes(e);
                 return (
                   <th key={e} style={{ padding: "6px 8px", textAlign: "center", color: ecfg.color }}>
-                    {ecfg.icon}{ecfg.short}{done ? "✅" : ""}換算
+                    {ecfg.label}{done ? "✅" : ""}換算
                   </th>
                 );
               })}
@@ -629,7 +693,7 @@ function DiffTables({ gender, schoolResults, config, completedEvents }) {
           <tbody>
             {others.map(r => {
               const d = keio.result.grandTotal !== null && r.result.grandTotal !== null
-                ? r.result.grandTotal - keio.result.grandTotal : null;
+                ? keio.result.grandTotal - r.result.grandTotal : null;
               return (
                 <tr key={r.school} style={{ borderBottom: `1px solid ${C.border}` }}>
                   <td style={{ padding: "8px 10px", fontWeight: 700, color: C.text }}>{r.school}</td>
@@ -659,7 +723,7 @@ function DiffTables({ gender, schoolResults, config, completedEvents }) {
         return (
           <div key={e} style={{ background: C.surface, border: `1px solid ${ecfg.color}33`, borderRadius: 12, overflow: "hidden" }}>
             <SectionHeader
-              title={`${ecfg.icon} ${ecfg.label}　慶應 vs 各校${done ? " ✅完了" : ""}`}
+              title={`${ecfg.label}　慶應 vs 各校${done ? " ✅完了" : ""}`}
               color={done ? C.positive : ecfg.color}
               right="得点差 / 換算pt差"
             />
@@ -680,9 +744,9 @@ function DiffTables({ gender, schoolResults, config, completedEvents }) {
                 {others.map(r => {
                   const kEv = keio.result.ev[e];
                   const rEv = r.result.ev[e];
-                  const ptDiff = kEv.totalPts !== null && rEv.totalPts !== null ? rEv.totalPts - kEv.totalPts : null;
+                  const ptDiff = kEv.totalPts !== null && rEv.totalPts !== null ? kEv.totalPts - rEv.totalPts : null;
                   const sDiff  = kEv.totalScore !== null && rEv.totalScore !== null
-                    ? parseFloat((rEv.totalScore - kEv.totalScore).toFixed(1)) : null;
+                    ? parseFloat((kEv.totalScore - rEv.totalScore).toFixed(1)) : null;
                   return (
                     <tr key={r.school} style={{ borderBottom: `1px solid ${C.border}` }}>
                       <td style={{ padding: "8px 10px", fontWeight: 700, color: C.text }}>{r.school}</td>
@@ -718,7 +782,7 @@ function EventBreakdown({ gender, schoolResults, mode, config, data }) {
         const ecfg = ECFG[e];
         return (
           <div key={e} style={{ background: C.surface, border: `1px solid ${ecfg.color}33`, borderRadius: 12, overflow: "hidden" }}>
-            <SectionHeader title={`${ecfg.icon} ${ecfg.label}　内訳`} color={ecfg.color} right="行をタップで選手詳細 ▶" />
+            <SectionHeader title={`${ecfg.label}　内訳`} color={ecfg.color} right="行をタップで選手詳細 ▶" />
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
               <thead>
                 <tr style={{ background: C.bg, borderBottom: `1px solid ${C.border}` }}>
@@ -779,8 +843,7 @@ function EventBreakdown({ gender, schoolResults, mode, config, data }) {
   );
 }
 
-function ResultTab({ config, data }) {
-  const [gender, setGender] = useState("men");
+function ResultTab({ config, data, gender }) {
   const [mode,   setMode]   = useState("B");
   const [view,   setView]   = useState("diff");
   const cfg = config[gender];
@@ -794,8 +857,6 @@ function ResultTab({ config, data }) {
 
   return (
     <div>
-      <GenderToggle gender={gender} onChange={setGender} />
-
       {/* モード + 全体進捗 */}
       <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 12, marginBottom: 14 }}>
         <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
@@ -822,7 +883,7 @@ function ResultTab({ config, data }) {
             return (
               <div key={e}>
                 <div style={{ fontSize: 10, color: done ? C.positive : ecfg.color, marginBottom: 4 }}>
-                  {ecfg.icon} {ecfg.short}{done ? " ✅" : ""}
+                  {ecfg.label}{done ? " ✅" : ""}
                 </div>
                 {SCHOOLS.map(s => {
                   const skrs = data[gender]?.[e]?.[s] || [];
@@ -890,12 +951,15 @@ function ResultTab({ config, data }) {
 // ─────────────────────────────────────────────────────────────────────────────
 export default function App() {
   const [tab, setTab] = useState("input");
+  const [gender, setGender] = useState("men");
+  const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const saveTimers = useRef({});
 
-  // Initialize from localStorage
-  const stored = loadFromStorage();
+  const initialData = buildInitialData();
   const [config, setConfig] = useState(() => {
+    const stored = loadFromStorage();
     if (stored.config) {
-      // merge with defaults to handle new fields
       return {
         men:   { ...DEFAULT_CONFIG.men,   ...stored.config.men   },
         women: { ...DEFAULT_CONFIG.women, ...stored.config.women },
@@ -903,36 +967,42 @@ export default function App() {
     }
     return { men: { ...DEFAULT_CONFIG.men }, women: { ...DEFAULT_CONFIG.women } };
   });
-  const [data, setData] = useState(() => stored.data || buildInitialData());
+  const [data, setData] = useState(initialData);
 
-  // Sync out count → rebuild skier arrays when config.out changes
+  // Load from Supabase on mount
   useEffect(() => {
-    setData(prev => {
-      const next = { ...prev };
-      for (const g of ["men", "women"]) {
-        const out = config[g].out;
-        next[g] = { ...next[g] };
-        for (const e of EVENTS) {
-          next[g][e] = { ...next[g][e] };
-          for (const s of SCHOOLS) {
-            const current = next[g][e][s] || [];
-            if (current.length !== out) {
-              const updated = Array.from({ length: out }, (_, i) =>
-                current[i] || { name: "", planned: "", actual: "" }
-              );
-              next[g][e][s] = updated;
-            }
-          }
-        }
-      }
-      return next;
+    setLoading(true);
+    loadAllScores(initialData).then(loaded => {
+      setData(loaded);
+      setLoading(false);
     });
-  }, [config.men.out, config.women.out]);
+  }, []);
 
-  // Auto-save to localStorage
+  // Poll Supabase every 10 seconds for real-time updates
   useEffect(() => {
-    saveToStorage(data, config);
-  }, [data, config]);
+    const interval = setInterval(() => {
+      loadAllScores(buildInitialData()).then(loaded => {
+        setData(loaded);
+      });
+    }, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Save config to localStorage
+  useEffect(() => {
+    saveToStorage(null, config);
+  }, [config]);
+
+  // Debounced save to Supabase when data changes
+  const saveSkierDebounced = useCallback((gender, event, school, idx, skier) => {
+    const key = `${gender}-${event}-${school}-${idx}`;
+    clearTimeout(saveTimers.current[key]);
+    setSyncing(true);
+    saveTimers.current[key] = setTimeout(async () => {
+      await saveSkier(gender, event, school, idx, skier);
+      setSyncing(false);
+    }, 800);
+  }, []);
 
   const handleReset = () => {
     if (window.confirm("全データをリセットしますか？この操作は元に戻せません。")) {
@@ -951,12 +1021,27 @@ export default function App() {
             <span style={{ fontSize: 17, fontWeight: 900, color: C.slalom, fontFamily: "'Georgia',serif", letterSpacing: "-0.02em" }}>
               WaterSki
             </span>
-            <span style={{ fontSize: 12, color: C.muted }}>大学選手権　団体戦</span>
+            <span style={{ fontSize: 12, color: C.muted }}>団体戦</span>
             <span style={{ fontSize: 10, background: C.accent + "22", color: C.accent, padding: "2px 8px", borderRadius: 20, border: `1px solid ${C.accent}44`, marginLeft: "auto" }}>
               IWWF換算点
             </span>
+            {loading && <span style={{ fontSize: 10, color: C.muted, marginLeft: 6 }}>読込中...</span>}
+            {syncing && !loading && <span style={{ fontSize: 10, color: C.positive, marginLeft: 6 }}>💾保存中</span>}
           </div>
-          <div style={{ display: "flex", marginTop: 8, borderBottom: `1px solid ${C.border}` }}>
+          {/* Global gender toggle */}
+          <div style={{ display: "flex", gap: 6, marginTop: 10, marginBottom: 6 }}>
+            {[{ key: "men", label: "👨 男子", color: C.men }, { key: "women", label: "👩 女子", color: C.women }].map(g => (
+              <button key={g.key} onClick={() => setGender(g.key)} style={{
+                flex: 1,
+                background: gender === g.key ? g.color + "22" : "transparent",
+                border: `1px solid ${gender === g.key ? g.color : C.border}`,
+                borderRadius: 8, color: gender === g.key ? g.color : C.muted,
+                fontSize: 13, fontWeight: gender === g.key ? 700 : 400,
+                padding: "6px", cursor: "pointer", transition: "all 0.2s",
+              }}>{g.label}</button>
+            ))}
+          </div>
+          <div style={{ display: "flex", borderBottom: `1px solid ${C.border}` }}>
             <AppTab label="⚙️ 設定" active={tab === "settings"} onClick={() => setTab("settings")} />
             <AppTab label="📝 入力" active={tab === "input"}    onClick={() => setTab("input")} />
             <AppTab label="📊 結果" active={tab === "result"}   onClick={() => setTab("result")} />
@@ -966,20 +1051,26 @@ export default function App() {
 
       {/* Main content */}
       <div style={{ maxWidth: 900, margin: "0 auto", padding: 16 }}>
-        {tab === "settings" && (
-          <SettingsTab config={config} setConfig={setConfig} onReset={handleReset} />
+        {loading && (
+          <div style={{ textAlign: "center", padding: "60px 0", color: C.muted }}>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>🌊</div>
+            <div style={{ fontSize: 14 }}>データを読み込んでいます...</div>
+          </div>
         )}
-        {tab === "input" && (
-          <InputTab config={config} data={data} setData={setData} />
+        {!loading && tab === "settings" && (
+          <SettingsTab config={config} setConfig={setConfig} onReset={handleReset} gender={gender} />
         )}
-        {tab === "result" && (
-          <ResultTab config={config} data={data} />
+        {!loading && tab === "input" && (
+          <InputTab config={config} data={data} setData={setData} gender={gender} saveSkierDebounced={saveSkierDebounced} />
+        )}
+        {!loading && tab === "result" && (
+          <ResultTab config={config} data={data} gender={gender} />
         )}
       </div>
 
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "0 16px 40px" }}>
         <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 14px", fontSize: 11, color: C.muted, lineHeight: 1.8 }}>
-          💾 データは自動保存されます。設定タブからリセット可能です。
+          ☁️ データはSupabaseに自動保存・リアルタイム同期されます（10秒ごと更新）。設定タブからリセット可能です。
         </div>
       </div>
     </div>

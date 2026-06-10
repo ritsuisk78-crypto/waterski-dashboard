@@ -51,8 +51,8 @@ function formatScore(event, scoreRaw) {
   if (!scoreRaw || scoreRaw === "null") return null;
   if (event === "slalom") {
     const p = scoreRaw.split("/");
-    if (p.length === 3) return `${p[0]}本 @${p[1]}m`;
-    if (p.length === 2) return `${p[0]}本 @${p[1]}m`;
+    if (p.length === 3) return `${p[0]}ブイ @${p[1]}m`;
+    if (p.length === 2) return `${p[0]}ブイ @${p[1]}m`;
     return scoreRaw;
   }
   if (event === "trick") return `${Number(scoreRaw).toLocaleString()}点`;

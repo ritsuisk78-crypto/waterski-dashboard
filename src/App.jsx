@@ -20,14 +20,20 @@ async function sbFetch(path, options = {}) {
 
 // ─── 選手実績ローダー ───────────────────────────────────────────
 async function loadPlayerByKanji(kanjiInput) {
-  const kanji = kanjiInput.replace(/[（(]\d+[）)]/g, "").trim();
+  // 学年・スペース・記号を除去して名前のみ抽出
+  const kanji = kanjiInput
+    .replace(/[（(][^）)]*[）)]/g, "")  // （4年）（3）などを除去
+    .replace(/[　\s]/g, "")              // 全角・半角スペース除去
+    .trim();
   if (!kanji) return null;
   try {
-    // 全件取得してJS側でマッチング（日本語ILIKEのエンコード問題を回避）
     const rows = await sbFetch("players?select=*");
     if (!rows || rows.length === 0) return null;
-    const matched = rows.find(p => p.kanji && p.kanji.includes(kanji));
-    return matched || null;
+    // 完全一致優先、次に部分一致
+    const exact = rows.find(p => p.kanji && p.kanji === kanji);
+    if (exact) return exact;
+    const partial = rows.find(p => p.kanji && p.kanji.includes(kanji));
+    return partial || null;
   } catch(e) { console.error("loadPlayerByKanji", e); return null; }
 }
 
@@ -51,7 +57,7 @@ function formatScore(event, scoreRaw) {
   if (!scoreRaw || scoreRaw === "null") return null;
   if (event === "slalom") {
     const p = scoreRaw.split("/");
-    if (p.length === 3) return `${p[0]}ブイ @${p[1]}m`;
+    if (p.length === 3) return `${p[0]}ブイ @${p[2]}m`;
     if (p.length === 2) return `${p[0]}ブイ @${p[1]}m`;
     return scoreRaw;
   }

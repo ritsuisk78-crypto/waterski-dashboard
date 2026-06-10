@@ -1,8 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SUPABASE CLIENT
-// ─────────────────────────────────────────────────────────────────────────────
 const SUPABASE_URL = "https://scoggdtvfvkecudbxztw.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNjb2dnZHR2ZnZrZWN1ZGJ4enR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA5NDQ1NjUsImV4cCI6MjA5NjUyMDU2NX0.2NLXTp2rO-4NWU3vlEbLhzKoeqH5MMrxMcsWUPuojOM";
 
@@ -21,6 +18,41 @@ async function sbFetch(path, options = {}) {
   return text ? JSON.parse(text) : null;
 }
 
+// ─── 選手実績ローダー ───────────────────────────────────────────
+async function loadPlayerByKanji(kanjiInput) {
+  const kanji = kanjiInput.replace(/[（(]\d+[）)]/g, "").trim();
+  if (!kanji) return null;
+  try {
+    const encoded = encodeURIComponent(kanji);
+    const rows = await sbFetch(`players?kanji=ilike.*${encoded}*&select=*&limit=1`);
+    return rows && rows.length > 0 ? rows[0] : null;
+  } catch(e) { console.error("loadPlayerByKanji", e); return null; }
+}
+
+async function loadPlayerResults(playerId) {
+  try {
+    const rows = await sbFetch(
+      `player_results?player_id=eq.${playerId}&select=*,competitions(name,short,held_date)&order=competitions(held_date)`
+    );
+    return rows || [];
+  } catch(e) { console.error("loadPlayerResults", e); return []; }
+}
+
+// ─── スコア表示フォーマット ──────────────────────────────────────
+function formatScore(event, scoreRaw) {
+  if (!scoreRaw || scoreRaw === "null") return null;
+  if (event === "slalom") {
+    const p = scoreRaw.split("/");
+    if (p.length === 3) return `${p[0]}本 @${p[1]}m`;
+    if (p.length === 2) return `${p[0]}本 @${p[1]}m`;
+    return scoreRaw;
+  }
+  if (event === "trick") return `${Number(scoreRaw).toLocaleString()}点`;
+  if (event === "jump")  return `${scoreRaw}m`;
+  return scoreRaw;
+}
+
+// ─── 既存コードと同一定数 ────────────────────────────────────────
 async function loadAllScores(initialData) {
   try {
     const rows = await sbFetch("scores?select=*");
@@ -69,16 +101,13 @@ async function saveConfig(config) {
   } catch(e) { console.error("saveConfig error", e); }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CONSTANTS
-// ─────────────────────────────────────────────────────────────────────────────
 const C = {
   bg: "#08101e", surface: "#0f1c2e", surface2: "#162438",
   border: "#1e3050", slalom: "#00d4ff", trick: "#ff6b35",
   jump: "#a3e635", text: "#e8edf5", muted: "#6b84a0",
   accent: "#ffd700", men: "#4e9eff", women: "#ff6eb4",
   keio: "#00a0e9", positive: "#4ade80", negative: "#f87171",
-  overlay: "rgba(4,10,20,0.85)",
+  overlay: "rgba(4,10,20,0.88)",
 };
 
 const SCHOOLS = ["慶應", "法政", "立教", "福大", "学習院"];
@@ -89,22 +118,18 @@ const ECFG = {
   jump:   { label: "ジャンプ",   short: "J", color: C.jump,   unit: "m",    icon: "🚀", step: "0.5" },
 };
 
-const DEFAULT_CONFIG = {
-  men: {
-    pin:      { slalom: 65, trick: 10000, jump: 62 },
-    topN:     3, out: 4,
-    handicap: 15,   // jump handicap in meters
-    label: "男子", icon: "👨", color: C.men,
-  },
-  women: {
-    pin:      { slalom: 58, trick: 8500, jump: 44 },
-    topN:     2, out: 3,
-    handicap: 10,
-    label: "女子", icon: "👩", color: C.women,
-  },
+const COMP_ORDER = ["cs1_2025","cs2_2025","inkare_2025","shinjin_2025","cs1_2026","cs2_2026"];
+const COMP_SHORT = {
+  cs1_2025:"CS1'25", cs2_2025:"CS2'25",
+  inkare_2025:"全日'25", shinjin_2025:"新人'25",
+  cs1_2026:"CS1'26", cs2_2026:"CS2'26",
 };
 
-// Build empty skier list for a school/event/gender
+const DEFAULT_CONFIG = {
+  men:   { pin: { slalom: 65, trick: 10000, jump: 62 }, topN: 3, out: 4, handicap: 15, label: "男子", icon: "👨", color: C.men },
+  women: { pin: { slalom: 58, trick: 8500,  jump: 44 }, topN: 2, out: 3, handicap: 10, label: "女子", icon: "👩", color: C.women },
+};
+
 function buildSkiers(count) {
   return Array.from({ length: count }, () => ({ name: "", planned: "", actual: "" }));
 }
@@ -114,17 +139,12 @@ function buildInitialData() {
     const cfg = DEFAULT_CONFIG[g];
     for (const e of EVENTS) {
       data[g][e] = {};
-      for (const s of SCHOOLS) {
-        data[g][e][s] = buildSkiers(cfg.out);
-      }
+      for (const s of SCHOOLS) { data[g][e][s] = buildSkiers(cfg.out); }
     }
   }
   return data;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CALCULATION
-// ─────────────────────────────────────────────────────────────────────────────
 function applyHandicap(score, event, handicap) {
   if (event !== "jump") return score;
   const v = parseFloat(score);
@@ -136,7 +156,6 @@ function calcConv(rawScore, event, pin, handicap) {
   const score = applyHandicap(rawScore, event, handicap);
   if (score === null || score === undefined) return null;
   const v = parseFloat(score);
-  // ジャンプはピン想定にもハンデを引く
   const effectivePin = event === "jump" ? Math.max(0, parseFloat(pin) - parseFloat(handicap)) : parseFloat(pin);
   if (isNaN(v) || isNaN(effectivePin) || effectivePin <= 0) return null;
   return Math.min(Math.round((v * 1000) / effectivePin), 1000);
@@ -178,7 +197,6 @@ function calcSchoolResult(schoolName, cfg, mode, data) {
   return { ev, grandTotal };
 }
 
-// Event is "complete" when ALL schools have ALL actual scores filled
 function getCompletedEvents(gender, data) {
   return EVENTS.filter(e =>
     SCHOOLS.every(s => {
@@ -188,20 +206,13 @@ function getCompletedEvents(gender, data) {
   );
 }
 
-function ptToUnit(ptDiff, pinVal) {
-  return Math.abs((ptDiff * pinVal) / 1000).toFixed(1);
-}
+function ptToUnit(ptDiff, pinVal) { return Math.abs((ptDiff * pinVal) / 1000).toFixed(1); }
 function signStr(v, suffix = "") {
   if (v === null || v === undefined) return "—";
   return (v >= 0 ? "+" : "") + v + suffix;
 }
-function diffColor(v) {
-  return v === null ? C.muted : v >= 0 ? C.positive : C.negative;
-}
+function diffColor(v) { return v === null ? C.muted : v >= 0 ? C.positive : C.negative; }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// LOCAL STORAGE
-// ─────────────────────────────────────────────────────────────────────────────
 const LS_KEY_DATA   = "waterski_data_v2";
 const LS_KEY_CONFIG = "waterski_config_v2";
 
@@ -209,15 +220,12 @@ function loadFromStorage() {
   try {
     const d = localStorage.getItem(LS_KEY_DATA);
     const c = localStorage.getItem(LS_KEY_CONFIG);
-    return {
-      data:   d ? JSON.parse(d) : null,
-      config: c ? JSON.parse(c) : null,
-    };
+    return { data: d ? JSON.parse(d) : null, config: c ? JSON.parse(c) : null };
   } catch { return { data: null, config: null }; }
 }
 function saveToStorage(data, config) {
   try {
-    localStorage.setItem(LS_KEY_DATA,   JSON.stringify(data));
+    localStorage.setItem(LS_KEY_DATA, JSON.stringify(data));
     localStorage.setItem(LS_KEY_CONFIG, JSON.stringify(config));
   } catch {}
 }
@@ -228,9 +236,187 @@ function clearStorage() {
   } catch {}
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// PLAYER HISTORY POPUP（新規追加）
+// ─────────────────────────────────────────────────────────────────
+function PlayerHistoryPopup({ kanjiInput, onClose }) {
+  const [player,  setPlayer]  = useState(null);
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState(null);
+
+  const displayName = kanjiInput.replace(/[（(]\d+[）)]/g, "").trim();
+
+  useEffect(() => {
+    if (!kanjiInput) return;
+    setLoading(true);
+    setError(null);
+    loadPlayerByKanji(kanjiInput).then(async (p) => {
+      if (!p) {
+        setError(`「${displayName}」の記録が見つかりません`);
+        setLoading(false);
+        return;
+      }
+      setPlayer(p);
+      const r = await loadPlayerResults(p.id);
+      setResults(r);
+      setLoading(false);
+    });
+  }, [kanjiInput]);
+
+  // results を competition_id → event → score_raw に整理
+  const matrix = {};
+  for (const r of results) {
+    if (!matrix[r.competition_id]) matrix[r.competition_id] = {};
+    matrix[r.competition_id][r.event] = r.score_raw;
+  }
+
+  const compIds = COMP_ORDER.filter(cid => matrix[cid]);
+  const latestComp = compIds[compIds.length - 1];
+
+  const playerEvents = player ? JSON.parse(player.events || "[]") : [];
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 500,
+        background: C.overlay, backdropFilter: "blur(6px)",
+        display: "flex", alignItems: "flex-end", justifyContent: "center",
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: C.surface,
+          border: `1px solid ${C.accent}33`,
+          borderRadius: "20px 20px 0 0",
+          width: "100%", maxWidth: 600,
+          padding: "20px 16px 44px",
+          maxHeight: "80vh", overflowY: "auto",
+        }}
+      >
+        {/* ハンドル */}
+        <div style={{ width: 36, height: 4, background: C.border, borderRadius: 2, margin: "0 auto 16px" }} />
+
+        {/* ヘッダー */}
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 20 }}>
+          <div style={{
+            width: 42, height: 42, borderRadius: "50%", flexShrink: 0,
+            background: C.men + "22", border: `1px solid ${C.men}44`,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 14, fontWeight: 700, color: C.men,
+          }}>
+            {displayName.charAt(0)}
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: C.text }}>{displayName}</div>
+            {player && (
+              <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>
+                {player.school}　{player.grade}　
+                <span style={{ color: player.gender === "men" ? C.men : C.women }}>
+                  {player.gender === "men" ? "男子" : "女子"}
+                </span>
+              </div>
+            )}
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: C.muted, fontSize: 22, cursor: "pointer", lineHeight: 1 }}>✕</button>
+        </div>
+
+        {/* 担当種目バッジ */}
+        {playerEvents.length > 0 && (
+          <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
+            {playerEvents.map(e => (
+              <span key={e} style={{
+                fontSize: 11, padding: "3px 10px",
+                background: ECFG[e].color + "22",
+                border: `1px solid ${ECFG[e].color}55`,
+                borderRadius: 20, color: ECFG[e].color, fontWeight: 700,
+              }}>{ECFG[e].label}</span>
+            ))}
+          </div>
+        )}
+
+        {/* ローディング */}
+        {loading && (
+          <div style={{ textAlign: "center", padding: "40px 0", color: C.muted }}>
+            <div style={{ fontSize: 24, marginBottom: 8 }}>🌊</div>
+            <div style={{ fontSize: 13 }}>読み込み中...</div>
+          </div>
+        )}
+
+        {/* エラー */}
+        {!loading && error && (
+          <div style={{ background: C.negative + "22", border: `1px solid ${C.negative}44`, borderRadius: 10, padding: 14, color: C.negative, fontSize: 13 }}>
+            {error}
+          </div>
+        )}
+
+        {/* 記録なし */}
+        {!loading && !error && compIds.length === 0 && (
+          <div style={{ textAlign: "center", padding: "32px 0", color: C.muted, fontSize: 13 }}>
+            過去の大会記録がありません
+          </div>
+        )}
+
+        {/* 大会別カード */}
+        {!loading && !error && compIds.map(cid => {
+          const isLatest = cid === latestComp;
+          return (
+            <div key={cid} style={{
+              background: C.surface2,
+              border: `1px solid ${isLatest ? C.accent + "55" : C.border}`,
+              borderRadius: 12, padding: "12px 14px", marginBottom: 10,
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: C.accent }}>
+                  {COMP_SHORT[cid] || cid}
+                </span>
+                {isLatest && (
+                  <span style={{ fontSize: 10, background: C.accent + "22", color: C.accent, border: `1px solid ${C.accent}44`, borderRadius: 10, padding: "1px 7px" }}>
+                    最新
+                  </span>
+                )}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                {EVENTS.map(ev => {
+                  const score = matrix[cid]?.[ev];
+                  const hasScore = score && score !== "null";
+                  const formatted = hasScore ? formatScore(ev, score) : null;
+                  return (
+                    <div key={ev} style={{
+                      background: hasScore ? ECFG[ev].color + "11" : C.bg,
+                      border: `1px solid ${hasScore ? ECFG[ev].color + "44" : C.border}`,
+                      borderRadius: 8, padding: "8px 10px",
+                    }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: hasScore ? ECFG[ev].color : C.muted, marginBottom: 4 }}>
+                        {ECFG[ev].label}
+                      </div>
+                      <div style={{ fontSize: 12, fontFamily: "monospace", color: hasScore ? C.text : C.muted, fontWeight: hasScore ? 700 : 400, lineHeight: 1.4 }}>
+                        {formatted || "—"}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+
+        {/* リザルト英語表記 */}
+        {player?.en_names && !loading && (
+          <div style={{ marginTop: 10, fontSize: 10, color: C.muted + "99", textAlign: "center" }}>
+            {JSON.parse(player.en_names).join(" / ")}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
 // SHARED UI
-// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
 function AppTab({ label, active, onClick }) {
   return (
     <button onClick={onClick} style={{
@@ -285,12 +471,9 @@ function MiniProgress({ filled, total, color }) {
 function NumField({ value, onChange, placeholder, step, style = {} }) {
   return (
     <input
-      type="number"
-      inputMode="decimal"
-      value={value}
+      type="number" inputMode="decimal" value={value}
       onChange={e => onChange(e.target.value)}
-      placeholder={placeholder}
-      step={step || "any"}
+      placeholder={placeholder} step={step || "any"}
       style={{
         background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6,
         color: C.text, fontSize: 14, padding: "8px 10px", outline: "none",
@@ -301,130 +484,134 @@ function NumField({ value, onChange, placeholder, step, style = {} }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PLAYER POPUP
-// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// PLAYER POPUP（既存 + 選手名クリックで実績表示を追加）
+// ─────────────────────────────────────────────────────────────────
 function PlayerPopup({ gender, school, event, mode, config, data, onClose }) {
   const cfg  = config[gender];
   const ecfg = ECFG[event];
   const skiers = data[gender]?.[event]?.[school] || [];
   const result = calcEventResult(skiers, event, cfg.pin[event], cfg.topN, mode, cfg.handicap);
+  const [historyTarget, setHistoryTarget] = useState(null);
 
   return (
-    <div
-      style={{ position: "fixed", inset: 0, zIndex: 300, background: C.overlay, backdropFilter: "blur(6px)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}
-      onClick={onClose}
-    >
-      <div onClick={e => e.stopPropagation()} style={{
-        background: C.surface, border: `1px solid ${ecfg.color}44`,
-        borderRadius: "16px 16px 0 0", width: "100%", maxWidth: 600, padding: "20px 16px 40px",
-      }}>
-        <div style={{ width: 36, height: 4, background: C.border, borderRadius: 2, margin: "0 auto 16px" }} />
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-          
-          <div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: ecfg.color }}>{ecfg.label}</div>
-            <div style={{ fontSize: 12, color: C.muted }}>{school}　{cfg.topN}人どり</div>
-          </div>
-          <div style={{ marginLeft: "auto", textAlign: "right" }}>
-            <div style={{ fontSize: 11, color: C.muted }}>チーム合計</div>
-            <div style={{ fontSize: 20, fontWeight: 900, fontFamily: "monospace", color: C.accent }}>
-              {result.totalPts !== null ? `${result.totalPts}pt` : "—"}
+    <>
+      <div
+        style={{ position: "fixed", inset: 0, zIndex: 300, background: C.overlay, backdropFilter: "blur(6px)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}
+        onClick={onClose}
+      >
+        <div onClick={e => e.stopPropagation()} style={{
+          background: C.surface, border: `1px solid ${ecfg.color}44`,
+          borderRadius: "16px 16px 0 0", width: "100%", maxWidth: 600, padding: "20px 16px 40px",
+        }}>
+          <div style={{ width: 36, height: 4, background: C.border, borderRadius: 2, margin: "0 auto 16px" }} />
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: ecfg.color }}>{ecfg.label}</div>
+              <div style={{ fontSize: 12, color: C.muted }}>{school}　{cfg.topN}人どり</div>
             </div>
-            {result.totalScore !== null && (
-              <div style={{ fontSize: 11, color: ecfg.color }}>
-                {event === "jump"
-                  ? `${result.totalScore.toFixed(1)}m（ハンデ前）`
-                  : `${result.totalScore}${ecfg.unit}`}
+            <div style={{ marginLeft: "auto", textAlign: "right" }}>
+              <div style={{ fontSize: 11, color: C.muted }}>チーム合計</div>
+              <div style={{ fontSize: 20, fontWeight: 900, fontFamily: "monospace", color: C.accent }}>
+                {result.totalPts !== null ? `${result.totalPts}pt` : "—"}
               </div>
-            )}
+              {result.totalScore !== null && (
+                <div style={{ fontSize: 11, color: ecfg.color }}>
+                  {event === "jump" ? `${result.totalScore.toFixed(1)}m（ハンデ前）` : `${result.totalScore}${ecfg.unit}`}
+                </div>
+              )}
+            </div>
+            <button onClick={onClose} style={{ background: "none", border: "none", color: C.muted, fontSize: 22, cursor: "pointer", marginLeft: 8 }}>✕</button>
           </div>
-          <button onClick={onClose} style={{ background: "none", border: "none", color: C.muted, fontSize: 22, cursor: "pointer", marginLeft: 8 }}>✕</button>
-        </div>
 
-        {skiers.map((sk, i) => {
-          const score = getEffectiveScore(sk, mode);
-          const pts   = score !== null ? calcConv(score, event, cfg.pin[event], cfg.handicap) : null;
-          const isAdopted = result.adopted.has(i);
-          const hasActual = sk.actual !== "";
-          const displayScore = event === "jump" && score !== null
-            ? `${score}m → ${applyHandicap(score, event, cfg.handicap)}m`
-            : score !== null ? `${score}${ecfg.unit}` : "—";
-          return (
-            <div key={i} style={{
-              display: "flex", alignItems: "center", gap: 10,
-              padding: "10px 12px", marginBottom: 8,
-              background: isAdopted ? C.accent + "11" : C.surface2,
-              border: `1px solid ${isAdopted ? C.accent + "44" : C.border}`,
-              borderRadius: 10,
-            }}>
-              <div style={{
-                width: 24, height: 24, borderRadius: "50%", flexShrink: 0,
-                background: isAdopted ? C.accent : C.surface,
-                border: `1px solid ${isAdopted ? C.accent : C.border}`,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: 11, fontWeight: 700, color: isAdopted ? C.bg : C.muted,
-              }}>{i + 1}</div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: sk.name ? C.text : C.muted }}>
-                  {sk.name || `選手${i + 1}`}
-                </div>
-                <div style={{ fontSize: 11, color: C.muted }}>想定: {sk.planned || "—"}{ecfg.unit}</div>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <div style={{ fontSize: 13, fontFamily: "monospace", fontWeight: 700, color: hasActual ? ecfg.color : C.muted }}>
-                  {displayScore}
-                  {hasActual && <span style={{ fontSize: 9, color: C.positive, marginLeft: 4 }}>実</span>}
-                </div>
+          {skiers.map((sk, i) => {
+            const score = getEffectiveScore(sk, mode);
+            const pts   = score !== null ? calcConv(score, event, cfg.pin[event], cfg.handicap) : null;
+            const isAdopted = result.adopted.has(i);
+            const hasActual = sk.actual !== "";
+            const displayScore = event === "jump" && score !== null
+              ? `${score}m → ${applyHandicap(score, event, cfg.handicap)}m`
+              : score !== null ? `${score}${ecfg.unit}` : "—";
+            return (
+              <div key={i} style={{
+                display: "flex", alignItems: "center", gap: 10,
+                padding: "10px 12px", marginBottom: 8,
+                background: isAdopted ? C.accent + "11" : C.surface2,
+                border: `1px solid ${isAdopted ? C.accent + "44" : C.border}`,
+                borderRadius: 10,
+              }}>
                 <div style={{
-                  fontSize: 12, fontFamily: "monospace",
-                  color: isAdopted ? C.accent : C.muted, fontWeight: isAdopted ? 700 : 400,
-                }}>
-                  {pts !== null ? `${pts}pt${isAdopted ? " ★" : ""}` : "—"}
+                  width: 24, height: 24, borderRadius: "50%", flexShrink: 0,
+                  background: isAdopted ? C.accent : C.surface,
+                  border: `1px solid ${isAdopted ? C.accent : C.border}`,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 11, fontWeight: 700, color: isAdopted ? C.bg : C.muted,
+                }}>{i + 1}</div>
+
+                <div style={{ flex: 1 }}>
+                  {/* 選手名クリックで実績ポップアップ */}
+                  <div
+                    onClick={() => sk.name && setHistoryTarget(sk.name)}
+                    style={{
+                      fontSize: 13, fontWeight: 600,
+                      color: sk.name ? C.text : C.muted,
+                      cursor: sk.name ? "pointer" : "default",
+                      display: "flex", alignItems: "center", gap: 4,
+                    }}
+                  >
+                    {sk.name || `選手${i + 1}`}
+                    {sk.name && (
+                      <span style={{ fontSize: 10, color: C.muted, opacity: 0.7 }}>📋</span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 11, color: C.muted }}>想定: {sk.planned || "—"}{ecfg.unit}</div>
+                </div>
+
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontSize: 13, fontFamily: "monospace", fontWeight: 700, color: hasActual ? ecfg.color : C.muted }}>
+                    {displayScore}
+                    {hasActual && <span style={{ fontSize: 9, color: C.positive, marginLeft: 4 }}>実</span>}
+                  </div>
+                  <div style={{ fontSize: 12, fontFamily: "monospace", color: isAdopted ? C.accent : C.muted, fontWeight: isAdopted ? 700 : 400 }}>
+                    {pts !== null ? `${pts}pt${isAdopted ? " ★" : ""}` : "—"}
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
 
-        <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{ flex: 1, height: 4, background: C.bg, borderRadius: 2, overflow: "hidden" }}>
-            <div style={{
-              height: "100%",
-              width: `${result.total ? result.filledActual / result.total * 100 : 0}%`,
-              background: result.filledActual === result.total ? C.positive : ecfg.color,
-              borderRadius: 2, transition: "width 0.3s",
-            }} />
+          <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ flex: 1, height: 4, background: C.bg, borderRadius: 2, overflow: "hidden" }}>
+              <div style={{
+                height: "100%",
+                width: `${result.total ? result.filledActual / result.total * 100 : 0}%`,
+                background: result.filledActual === result.total ? C.positive : ecfg.color,
+                borderRadius: 2, transition: "width 0.3s",
+              }} />
+            </div>
+            <MiniProgress filled={result.filledActual} total={result.total} color={ecfg.color} />
           </div>
-          <MiniProgress filled={result.filledActual} total={result.total} color={ecfg.color} />
         </div>
       </div>
-    </div>
+
+      {/* 選手名タップで実績ポップアップ */}
+      {historyTarget && (
+        <PlayerHistoryPopup kanjiInput={historyTarget} onClose={() => setHistoryTarget(null)} />
+      )}
+    </>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SETTINGS TAB
-// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// SETTINGS TAB（既存のまま）
+// ─────────────────────────────────────────────────────────────────
 function SettingsTab({ config, setConfig, onReset, gender }) {
   const cfg = config[gender];
-
-  const update = (field, val) => {
-    setConfig(prev => ({
-      ...prev,
-      [gender]: { ...prev[gender], [field]: val },
-    }));
-  };
-  const updatePin = (event, val) => {
-    setConfig(prev => ({
-      ...prev,
-      [gender]: { ...prev[gender], pin: { ...prev[gender].pin, [event]: val } },
-    }));
-  };
+  const update = (field, val) => setConfig(prev => ({ ...prev, [gender]: { ...prev[gender], [field]: val } }));
+  const updatePin = (event, val) => setConfig(prev => ({ ...prev, [gender]: { ...prev[gender], pin: { ...prev[gender].pin, [event]: val } } }));
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
-      {/* ピン想定 */}
       <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: cfg.color, marginBottom: 12 }}>
           {cfg.icon} {cfg.label}　ピン想定（個人1位予想）
@@ -433,52 +620,24 @@ function SettingsTab({ config, setConfig, onReset, gender }) {
           {EVENTS.map(e => (
             <div key={e}>
               <div style={{ fontSize: 10, color: ECFG[e].color, marginBottom: 4 }}>{ECFG[e].label}（{ECFG[e].unit}）</div>
-              <NumField
-                value={cfg.pin[e]}
-                onChange={v => updatePin(e, v)}
-                placeholder={ECFG[e].label}
-                step={ECFG[e].step}
-                style={{ border: `1px solid ${ECFG[e].color}44`, color: ECFG[e].color }}
-              />
+              <NumField value={cfg.pin[e]} onChange={v => updatePin(e, v)} placeholder={ECFG[e].label} step={ECFG[e].step} style={{ border: `1px solid ${ECFG[e].color}44`, color: ECFG[e].color }} />
             </div>
           ))}
         </div>
       </div>
-
-      {/* 集計設定 */}
       <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 12 }}>📋 集計設定</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <div>
-            <div style={{ fontSize: 10, color: C.muted, marginBottom: 4 }}>出場人数</div>
-            <NumField value={cfg.out} onChange={v => update("out", parseInt(v) || 1)} placeholder="4" step="1" />
-          </div>
-          <div>
-            <div style={{ fontSize: 10, color: C.muted, marginBottom: 4 }}>採用人数（上位N人どり）</div>
-            <NumField value={cfg.topN} onChange={v => update("topN", parseInt(v) || 1)} placeholder="3" step="1" />
-          </div>
-          <div>
-            <div style={{ fontSize: 10, color: C.jump, marginBottom: 4 }}>🚀 Jハンデ（m引き）</div>
-            <NumField value={cfg.handicap} onChange={v => update("handicap", parseFloat(v) || 0)} placeholder="15" step="0.5"
-              style={{ border: `1px solid ${C.jump}44`, color: C.jump }} />
-          </div>
+          <div><div style={{ fontSize: 10, color: C.muted, marginBottom: 4 }}>出場人数</div><NumField value={cfg.out} onChange={v => update("out", parseInt(v) || 1)} placeholder="4" step="1" /></div>
+          <div><div style={{ fontSize: 10, color: C.muted, marginBottom: 4 }}>採用人数（上位N人どり）</div><NumField value={cfg.topN} onChange={v => update("topN", parseInt(v) || 1)} placeholder="3" step="1" /></div>
+          <div><div style={{ fontSize: 10, color: C.jump, marginBottom: 4 }}>🚀 Jハンデ（m引き）</div><NumField value={cfg.handicap} onChange={v => update("handicap", parseFloat(v) || 0)} placeholder="15" step="0.5" style={{ border: `1px solid ${C.jump}44`, color: C.jump }} /></div>
         </div>
-        <div style={{ marginTop: 10, fontSize: 11, color: C.muted }}>
-          現在：{cfg.out}人出・{cfg.topN}人どり　Jハンデ -{cfg.handicap}m
-        </div>
+        <div style={{ marginTop: 10, fontSize: 11, color: C.muted }}>現在：{cfg.out}人出・{cfg.topN}人どり　Jハンデ -{cfg.handicap}m</div>
       </div>
-
-      {/* リセット */}
       <div style={{ background: C.surface, border: `1px solid ${C.negative}33`, borderRadius: 12, padding: 16 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: C.negative, marginBottom: 8 }}>⚠️ データリセット</div>
-        <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>
-          全ての入力データ・設定を初期化します。この操作は元に戻せません。
-        </div>
-        <button onClick={onReset} style={{
-          background: C.negative + "22", border: `1px solid ${C.negative}66`,
-          borderRadius: 8, color: C.negative, fontSize: 13, fontWeight: 700,
-          padding: "10px 20px", cursor: "pointer", width: "100%",
-        }}>
+        <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>全ての入力データ・設定を初期化します。この操作は元に戻せません。</div>
+        <button onClick={onReset} style={{ background: C.negative + "22", border: `1px solid ${C.negative}66`, borderRadius: 8, color: C.negative, fontSize: 13, fontWeight: 700, padding: "10px 20px", cursor: "pointer", width: "100%" }}>
           🗑 全データをリセット
         </button>
       </div>
@@ -486,12 +645,13 @@ function SettingsTab({ config, setConfig, onReset, gender }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// INPUT TAB
-// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// INPUT TAB（実績ボタン追加）
+// ─────────────────────────────────────────────────────────────────
 function InputTab({ config, data, setData, gender, saveSkierDebounced }) {
   const [event,  setEvent]  = useState("slalom");
   const [school, setSchool] = useState("慶應");
+  const [historyTarget, setHistoryTarget] = useState(null);
 
   const cfg   = config[gender];
   const ecfg  = ECFG[event];
@@ -504,10 +664,7 @@ function InputTab({ config, data, setData, gender, saveSkierDebounced }) {
       );
       const newSkier = updated[idx];
       saveSkierDebounced(gender, event, school, idx, newSkier);
-      return {
-        ...prev,
-        [gender]: { ...prev[gender], [event]: { ...prev[gender][event], [school]: updated } },
-      };
+      return { ...prev, [gender]: { ...prev[gender], [event]: { ...prev[gender][event], [school]: updated } } };
     });
   }, [gender, event, school, setData, saveSkierDebounced]);
 
@@ -519,19 +676,16 @@ function InputTab({ config, data, setData, gender, saveSkierDebounced }) {
           const c = ECFG[e];
           const skrs = data[gender]?.[e]?.[school] || [];
           const f = skrs.filter(sk => sk.actual !== "").length;
-          const t = skrs.length;
-          const done = f === t && t > 0;
           return (
             <button key={e} onClick={() => setEvent(e)} style={{
-              flex: 1,
-              background: event === e ? c.color + "22" : C.surface,
+              flex: 1, background: event === e ? c.color + "22" : C.surface,
               border: `1px solid ${event === e ? c.color : C.border}`,
               borderRadius: 10, color: event === e ? c.color : C.muted,
               fontSize: 13, fontWeight: event === e ? 700 : 400,
               padding: "10px 6px", cursor: "pointer", textAlign: "center",
             }}>
               <div style={{ marginBottom: 4, fontSize: 12 }}>{c.label}</div>
-              <MiniProgress filled={f} total={t} color={c.color} />
+              <MiniProgress filled={f} total={skrs.length} color={c.color} />
             </button>
           );
         })}
@@ -542,19 +696,18 @@ function InputTab({ config, data, setData, gender, saveSkierDebounced }) {
         {SCHOOLS.map(s => {
           const skrs = data[gender]?.[event]?.[s] || [];
           const f = skrs.filter(sk => sk.actual !== "").length;
-          const t = skrs.length;
-          const done = f === t && t > 0;
+          const done = f === skrs.length && skrs.length > 0;
           return (
             <button key={s} onClick={() => setSchool(s)} style={{
               background: school === s ? C.keio : C.surface,
               border: `1px solid ${school === s ? C.keio : C.border}`,
               borderRadius: 20, color: school === s ? "#fff" : C.muted,
               fontSize: 12, padding: "5px 12px", cursor: "pointer",
-              fontWeight: school === s ? 700 : 400, textAlign: "center",
+              fontWeight: school === s ? 700 : 400,
             }}>
               <div>{s}</div>
               <div style={{ fontSize: 10, color: school === s ? "#ffffffaa" : done ? C.positive : C.muted, fontFamily: "monospace" }}>
-                {f}/{t}{done ? " ✅" : ""}
+                {f}/{skrs.length}{done ? " ✅" : ""}
               </div>
             </button>
           );
@@ -568,17 +721,9 @@ function InputTab({ config, data, setData, gender, saveSkierDebounced }) {
           <MiniProgress filled={skiers.filter(sk => sk.actual !== "").length} total={skiers.length} color={ecfg.color} />
         </div>
         <div style={{ height: 4, background: C.bg, borderRadius: 2, overflow: "hidden" }}>
-          <div style={{
-            height: "100%",
-            width: `${skiers.length ? skiers.filter(sk => sk.actual !== "").length / skiers.length * 100 : 0}%`,
-            background: ecfg.color, borderRadius: 2, transition: "width 0.3s",
-          }} />
+          <div style={{ height: "100%", width: `${skiers.length ? skiers.filter(sk => sk.actual !== "").length / skiers.length * 100 : 0}%`, background: ecfg.color, borderRadius: 2, transition: "width 0.3s" }} />
         </div>
-        {event === "jump" && (
-          <div style={{ fontSize: 10, color: C.jump, marginTop: 6 }}>
-            ※ Jハンデ -{cfg.handicap}m を引いて換算点を計算します
-          </div>
-        )}
+        {event === "jump" && <div style={{ fontSize: 10, color: C.jump, marginTop: 6 }}>※ Jハンデ -{cfg.handicap}m を引いて換算点を計算します</div>}
       </div>
 
       {/* 選手カード */}
@@ -587,71 +732,42 @@ function InputTab({ config, data, setData, gender, saveSkierDebounced }) {
         const score = hasActual ? sk.actual : sk.planned !== "" ? sk.planned : null;
         const pts = score !== null ? calcConv(score, event, cfg.pin[event], cfg.handicap) : null;
         return (
-          <div key={i} style={{
-            background: C.surface,
-            border: `1px solid ${hasActual ? ecfg.color + "55" : C.border}`,
-            borderRadius: 10, padding: 14, marginBottom: 10,
-          }}>
+          <div key={i} style={{ background: C.surface, border: `1px solid ${hasActual ? ecfg.color + "55" : C.border}`, borderRadius: 10, padding: 14, marginBottom: 10 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-              <div style={{
-                background: hasActual ? ecfg.color : C.surface2,
-                borderRadius: "50%", width: 26, height: 26, flexShrink: 0,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: 11, fontWeight: 700, color: hasActual ? C.bg : C.muted,
-              }}>{i + 1}</div>
+              <div style={{ background: hasActual ? ecfg.color : C.surface2, borderRadius: "50%", width: 26, height: 26, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: hasActual ? C.bg : C.muted }}>
+                {i + 1}
+              </div>
               <input
                 value={sk.name}
                 onChange={e => updateSkier(i, "name", e.target.value)}
-                placeholder={`選手${i + 1}`}
-                style={{
-                  background: "transparent", border: "none",
-                  borderBottom: `1px solid ${C.border}`, color: C.text,
-                  fontSize: 14, fontWeight: 700, padding: "2px 0",
-                  outline: "none", flex: 1,
-                }}
+                placeholder={`選手${i + 1}（例: 内藤駿（3））`}
+                style={{ background: "transparent", border: "none", borderBottom: `1px solid ${C.border}`, color: C.text, fontSize: 14, fontWeight: 700, padding: "2px 0", outline: "none", flex: 1 }}
               />
+              {/* 実績ボタン：名前があるときのみ表示 */}
+              {sk.name && (
+                <button
+                  onClick={() => setHistoryTarget(sk.name)}
+                  style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.muted, fontSize: 11, padding: "4px 10px", cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", gap: 4 }}
+                >
+                  📋 実績
+                </button>
+              )}
               {hasActual && (
-                <span style={{ fontSize: 10, background: C.positive + "22", color: C.positive, border: `1px solid ${C.positive}44`, borderRadius: 10, padding: "2px 8px" }}>
-                  ✅ 入力済み
-                </span>
+                <span style={{ fontSize: 10, background: C.positive + "22", color: C.positive, border: `1px solid ${C.positive}44`, borderRadius: 10, padding: "2px 8px" }}>✅</span>
               )}
             </div>
-
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-              {/* 想定 */}
               <div>
                 <div style={{ fontSize: 10, color: C.muted, marginBottom: 4 }}>想定（{ecfg.unit}）</div>
-                <NumField
-                  value={sk.planned}
-                  onChange={v => updateSkier(i, "planned", v)}
-                  placeholder="—"
-                  step={ecfg.step}
-                />
+                <NumField value={sk.planned} onChange={v => updateSkier(i, "planned", v)} placeholder="—" step={ecfg.step} />
               </div>
-              {/* 実際 */}
               <div>
-                <div style={{ fontSize: 10, color: hasActual ? ecfg.color : C.muted, marginBottom: 4 }}>
-                  {hasActual ? "🔴 実際" : "実際"}
-                </div>
-                <NumField
-                  value={sk.actual}
-                  onChange={v => updateSkier(i, "actual", v)}
-                  placeholder="入力"
-                  step={ecfg.step}
-                  style={{ border: `1px solid ${hasActual ? ecfg.color + "66" : C.border}`, color: hasActual ? ecfg.color : C.text }}
-                />
+                <div style={{ fontSize: 10, color: hasActual ? ecfg.color : C.muted, marginBottom: 4 }}>{hasActual ? "🔴 実際" : "実際"}</div>
+                <NumField value={sk.actual} onChange={v => updateSkier(i, "actual", v)} placeholder="入力" step={ecfg.step} style={{ border: `1px solid ${hasActual ? ecfg.color + "66" : C.border}`, color: hasActual ? ecfg.color : C.text }} />
               </div>
-              {/* 換算点 */}
               <div>
                 <div style={{ fontSize: 10, color: C.muted, marginBottom: 4 }}>換算点</div>
-                <div style={{
-                  background: pts !== null ? C.accent + "11" : C.bg,
-                  border: `1px solid ${pts !== null ? C.accent + "44" : C.border}`,
-                  borderRadius: 6, padding: "8px 10px",
-                  fontFamily: "monospace", fontSize: 14,
-                  color: pts !== null ? C.accent : C.muted, fontWeight: pts !== null ? 700 : 400,
-                  textAlign: "center",
-                }}>
+                <div style={{ background: pts !== null ? C.accent + "11" : C.bg, border: `1px solid ${pts !== null ? C.accent + "44" : C.border}`, borderRadius: 6, padding: "8px 10px", fontFamily: "monospace", fontSize: 14, color: pts !== null ? C.accent : C.muted, fontWeight: pts !== null ? 700 : 400, textAlign: "center" }}>
                   {pts !== null ? `${pts}pt` : "—"}
                 </div>
               </div>
@@ -659,21 +775,24 @@ function InputTab({ config, data, setData, gender, saveSkierDebounced }) {
           </div>
         );
       })}
+
+      {/* 実績ポップアップ */}
+      {historyTarget && (
+        <PlayerHistoryPopup kanjiInput={historyTarget} onClose={() => setHistoryTarget(null)} />
+      )}
     </div>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// RESULT TAB
-// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// RESULT TAB（既存のまま）
+// ─────────────────────────────────────────────────────────────────
 function DiffTables({ gender, schoolResults, config, completedEvents }) {
-  const cfg   = config[gender];
+  const cfg  = config[gender];
   const keio  = schoolResults.find(r => r.school === "慶應");
   const others = schoolResults.filter(r => r.school !== "慶應");
-
   return (
     <div style={{ display: "grid", gap: 12 }}>
-      {/* 総合 */}
       <div style={{ background: C.surface, border: `1px solid ${C.accent}33`, borderRadius: 12, overflow: "hidden" }}>
         <SectionHeader title="総合　慶應 vs 各校" color={C.accent} />
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
@@ -681,65 +800,43 @@ function DiffTables({ gender, schoolResults, config, completedEvents }) {
             <tr style={{ background: C.bg, borderBottom: `1px solid ${C.border}` }}>
               <th style={{ padding: "6px 10px", textAlign: "left", color: C.muted, width: "28%" }}>学校</th>
               <th style={{ padding: "6px 8px", textAlign: "center", color: C.accent }}>換算点差</th>
-              {EVENTS.map(e => {
-                const ecfg = ECFG[e];
-                const done = completedEvents.includes(e);
-                return (
-                  <th key={e} style={{ padding: "6px 8px", textAlign: "center", color: ecfg.color }}>
-                    {ecfg.label}{done ? "✅" : ""}換算
-                  </th>
-                );
-              })}
+              {EVENTS.map(e => (
+                <th key={e} style={{ padding: "6px 8px", textAlign: "center", color: ECFG[e].color }}>
+                  {ECFG[e].label}{completedEvents.includes(e) ? "✅" : ""}換算
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
             {others.map(r => {
-              const d = keio.result.grandTotal !== null && r.result.grandTotal !== null
-                ? keio.result.grandTotal - r.result.grandTotal : null;
+              const d = keio.result.grandTotal !== null && r.result.grandTotal !== null ? keio.result.grandTotal - r.result.grandTotal : null;
               return (
                 <tr key={r.school} style={{ borderBottom: `1px solid ${C.border}` }}>
                   <td style={{ padding: "8px 10px", fontWeight: 700, color: C.text }}>{r.school}</td>
-                  <td style={{ padding: "8px 8px", textAlign: "center", fontFamily: "monospace", fontWeight: 700, color: diffColor(d) }}>
-                    {signStr(d, "pt")}
-                  </td>
-                  {EVENTS.map(e => {
-                    const ecfg = ECFG[e];
-                    const pinVal = cfg.pin[e];
-                    return (
-                      <td key={e} style={{ padding: "8px 6px", textAlign: "center", fontFamily: "monospace", fontSize: 11, color: d === null ? C.muted : ecfg.color }}>
-                        {d === null ? "—" : `${d >= 0 ? "+" : "-"}${ptToUnit(Math.abs(d), pinVal)}${ecfg.unit}`}
-                      </td>
-                    );
-                  })}
+                  <td style={{ padding: "8px 8px", textAlign: "center", fontFamily: "monospace", fontWeight: 700, color: diffColor(d) }}>{signStr(d, "pt")}</td>
+                  {EVENTS.map(e => (
+                    <td key={e} style={{ padding: "8px 6px", textAlign: "center", fontFamily: "monospace", fontSize: 11, color: d === null ? C.muted : ECFG[e].color }}>
+                      {d === null ? "—" : `${d >= 0 ? "+" : "-"}${ptToUnit(Math.abs(d), cfg.pin[e])}${ECFG[e].unit}`}
+                    </td>
+                  ))}
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
-
-      {/* 種目別差分 */}
       {EVENTS.map(e => {
         const ecfg = ECFG[e];
         const done = completedEvents.includes(e);
         return (
           <div key={e} style={{ background: C.surface, border: `1px solid ${ecfg.color}33`, borderRadius: 12, overflow: "hidden" }}>
-            <SectionHeader
-              title={`${ecfg.label}　慶應 vs 各校${done ? " ✅完了" : ""}`}
-              color={done ? C.positive : ecfg.color}
-              right="得点差 / 換算pt差"
-            />
+            <SectionHeader title={`${ecfg.label}　慶應 vs 各校${done ? " ✅完了" : ""}`} color={done ? C.positive : ecfg.color} right="得点差 / 換算pt差" />
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
               <thead>
                 <tr style={{ background: C.bg, borderBottom: `1px solid ${C.border}` }}>
                   <th style={{ padding: "6px 10px", textAlign: "left", color: C.muted, width: "28%" }}>学校</th>
-                  <th style={{ padding: "6px 8px", textAlign: "center" }}>
-                    <div style={{ color: ecfg.color }}>得点差（{ecfg.unit}）</div>
-                    <div style={{ color: C.accent, fontSize: 10 }}>換算点差（pt）</div>
-                  </th>
-                  <th style={{ padding: "6px 8px", textAlign: "center", color: C.muted, fontSize: 10 }}>
-                    <div>慶應</div><div>相手</div>
-                  </th>
+                  <th style={{ padding: "6px 8px", textAlign: "center" }}><div style={{ color: ecfg.color }}>得点差（{ecfg.unit}）</div><div style={{ color: C.accent, fontSize: 10 }}>換算点差（pt）</div></th>
+                  <th style={{ padding: "6px 8px", textAlign: "center", color: C.muted, fontSize: 10 }}><div>慶應</div><div>相手</div></th>
                 </tr>
               </thead>
               <tbody>
@@ -747,18 +844,13 @@ function DiffTables({ gender, schoolResults, config, completedEvents }) {
                   const kEv = keio.result.ev[e];
                   const rEv = r.result.ev[e];
                   const ptDiff = kEv.totalPts !== null && rEv.totalPts !== null ? kEv.totalPts - rEv.totalPts : null;
-                  const sDiff  = kEv.totalScore !== null && rEv.totalScore !== null
-                    ? parseFloat((kEv.totalScore - rEv.totalScore).toFixed(1)) : null;
+                  const sDiff  = kEv.totalScore !== null && rEv.totalScore !== null ? parseFloat((kEv.totalScore - rEv.totalScore).toFixed(1)) : null;
                   return (
                     <tr key={r.school} style={{ borderBottom: `1px solid ${C.border}` }}>
                       <td style={{ padding: "8px 10px", fontWeight: 700, color: C.text }}>{r.school}</td>
                       <td style={{ padding: "6px 8px", textAlign: "center" }}>
-                        <div style={{ fontFamily: "monospace", fontSize: 13, fontWeight: 700, color: diffColor(sDiff) }}>
-                          {sDiff !== null ? `${sDiff >= 0 ? "+" : ""}${sDiff}${ecfg.unit}` : "—"}
-                        </div>
-                        <div style={{ fontFamily: "monospace", fontSize: 11, color: diffColor(ptDiff), marginTop: 2 }}>
-                          {signStr(ptDiff, "pt")}
-                        </div>
+                        <div style={{ fontFamily: "monospace", fontSize: 13, fontWeight: 700, color: diffColor(sDiff) }}>{sDiff !== null ? `${sDiff >= 0 ? "+" : ""}${sDiff}${ecfg.unit}` : "—"}</div>
+                        <div style={{ fontFamily: "monospace", fontSize: 11, color: diffColor(ptDiff), marginTop: 2 }}>{signStr(ptDiff, "pt")}</div>
                       </td>
                       <td style={{ padding: "6px 8px", textAlign: "center", fontSize: 11 }}>
                         <div style={{ color: C.keio }}>{kEv.filledActual}/{kEv.total}</div>
@@ -797,23 +889,13 @@ function EventBreakdown({ gender, schoolResults, mode, config, data }) {
               <tbody>
                 {schoolResults.map(({ school, result }) => {
                   const ev = result.ev[e];
-                  const done = ev.filledActual === ev.total && ev.total > 0;
                   return (
-                    <tr key={school}
-                      onClick={() => setPopup({ school, event: e })}
-                      style={{
-                        borderBottom: `1px solid ${C.border}`,
-                        background: school === "慶應" ? C.keio + "11" : "transparent",
-                        cursor: "pointer",
-                      }}
-                    >
+                    <tr key={school} onClick={() => setPopup({ school, event: e })} style={{ borderBottom: `1px solid ${C.border}`, background: school === "慶應" ? C.keio + "11" : "transparent", cursor: "pointer" }}>
                       <td style={{ padding: "10px 10px", fontWeight: school === "慶應" ? 700 : 400, color: school === "慶應" ? C.keio : C.text }}>
                         {school} <span style={{ fontSize: 10, color: C.muted }}>▶</span>
                       </td>
                       <td style={{ padding: "10px 8px", textAlign: "center", fontFamily: "monospace", color: ecfg.color }}>
-                        {ev.totalScore !== null
-                          ? `${e === "jump" ? ev.totalScore.toFixed(1) : ev.totalScore}${ecfg.unit}`
-                          : "—"}
+                        {ev.totalScore !== null ? `${e === "jump" ? ev.totalScore.toFixed(1) : ev.totalScore}${ecfg.unit}` : "—"}
                       </td>
                       <td style={{ padding: "10px 8px", textAlign: "center", fontFamily: "monospace", color: C.accent, fontWeight: 700 }}>
                         {ev.totalPts !== null ? `${ev.totalPts}pt` : "—"}
@@ -829,54 +911,28 @@ function EventBreakdown({ gender, schoolResults, mode, config, data }) {
           </div>
         );
       })}
-
-      {popup && (
-        <PlayerPopup
-          gender={gender}
-          school={popup.school}
-          event={popup.event}
-          mode={mode}
-          config={config}
-          data={data}
-          onClose={() => setPopup(null)}
-        />
-      )}
+      {popup && <PlayerPopup gender={gender} school={popup.school} event={popup.event} mode="B" config={config} data={data} onClose={() => setPopup(null)} />}
     </div>
   );
 }
 
 function ResultTab({ config, data, gender }) {
-  const [mode,   setMode]   = useState("B");
-  const [view,   setView]   = useState("diff");
+  const [mode, setMode] = useState("B");
+  const [view, setView] = useState("diff");
   const cfg = config[gender];
-
-  const schoolResults = SCHOOLS.map(school => ({
-    school,
-    result: calcSchoolResult(school, cfg, mode, data[gender] || {}),
-  }));
-
+  const schoolResults = SCHOOLS.map(school => ({ school, result: calcSchoolResult(school, cfg, mode, data[gender] || {}) }));
   const completedEvents = getCompletedEvents(gender, data[gender] || {});
 
   return (
     <div>
-      {/* モード + 全体進捗 */}
       <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 12, marginBottom: 14 }}>
         <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
           {[{ key: "A", title: "Aモード", sub: "入力済みのみ" }, { key: "B", title: "Bモード", sub: "実際＋想定混在" }].map(m => (
-            <button key={m.key} onClick={() => setMode(m.key)} style={{
-              flex: 1, background: mode === m.key ? C.accent + "22" : C.surface2,
-              border: `1px solid ${mode === m.key ? C.accent : C.border}`,
-              borderRadius: 8, color: mode === m.key ? C.accent : C.muted,
-              fontSize: 13, fontWeight: mode === m.key ? 700 : 400,
-              padding: "8px 10px", cursor: "pointer",
-            }}>
-              <div>{m.title}</div>
-              <div style={{ fontSize: 10, marginTop: 2 }}>{m.sub}</div>
+            <button key={m.key} onClick={() => setMode(m.key)} style={{ flex: 1, background: mode === m.key ? C.accent + "22" : C.surface2, border: `1px solid ${mode === m.key ? C.accent : C.border}`, borderRadius: 8, color: mode === m.key ? C.accent : C.muted, fontSize: 13, fontWeight: mode === m.key ? 700 : 400, padding: "8px 10px", cursor: "pointer" }}>
+              <div>{m.title}</div><div style={{ fontSize: 10, marginTop: 2 }}>{m.sub}</div>
             </button>
           ))}
         </div>
-
-        {/* 全体進捗グリッド */}
         <div style={{ fontSize: 10, color: C.muted, marginBottom: 6 }}>入力進捗</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
           {EVENTS.map(e => {
@@ -884,9 +940,7 @@ function ResultTab({ config, data, gender }) {
             const done = completedEvents.includes(e);
             return (
               <div key={e}>
-                <div style={{ fontSize: 10, color: done ? C.positive : ecfg.color, marginBottom: 4 }}>
-                  {ecfg.label}{done ? " ✅" : ""}
-                </div>
+                <div style={{ fontSize: 10, color: done ? C.positive : ecfg.color, marginBottom: 4 }}>{ecfg.label}{done ? " ✅" : ""}</div>
                 {SCHOOLS.map(s => {
                   const skrs = data[gender]?.[e]?.[s] || [];
                   const f = skrs.filter(sk => sk.actual !== "").length;
@@ -908,49 +962,31 @@ function ResultTab({ config, data, gender }) {
         </div>
       </div>
 
-      {/* チーム合計 */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 6, marginBottom: 14 }}>
         {schoolResults.map(({ school, result }) => (
-          <div key={school} style={{
-            background: school === "慶應" ? C.keio + "22" : C.surface,
-            border: `1px solid ${school === "慶應" ? C.keio : C.border}`,
-            borderRadius: 10, padding: "8px 4px", textAlign: "center",
-          }}>
+          <div key={school} style={{ background: school === "慶應" ? C.keio + "22" : C.surface, border: `1px solid ${school === "慶應" ? C.keio : C.border}`, borderRadius: 10, padding: "8px 4px", textAlign: "center" }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: school === "慶應" ? C.keio : C.text, marginBottom: 4 }}>{school}</div>
-            <div style={{ fontSize: 16, fontWeight: 900, fontFamily: "monospace", color: school === "慶應" ? C.keio : C.text }}>
-              {result.grandTotal ?? "—"}
-            </div>
+            <div style={{ fontSize: 16, fontWeight: 900, fontFamily: "monospace", color: school === "慶應" ? C.keio : C.text }}>{result.grandTotal ?? "—"}</div>
             <div style={{ fontSize: 9, color: C.muted }}>pt</div>
           </div>
         ))}
       </div>
 
-      {/* 差分/内訳切替 */}
       <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
         {[{ key: "diff", label: "📉 差分分析" }, { key: "breakdown", label: "📋 種目別内訳" }].map(v => (
-          <button key={v.key} onClick={() => setView(v.key)} style={{
-            flex: 1, background: view === v.key ? C.surface : C.surface2,
-            border: `1px solid ${view === v.key ? C.accent : C.border}`,
-            borderRadius: 8, color: view === v.key ? C.accent : C.muted,
-            fontSize: 13, fontWeight: view === v.key ? 700 : 400,
-            padding: "8px", cursor: "pointer",
-          }}>{v.label}</button>
+          <button key={v.key} onClick={() => setView(v.key)} style={{ flex: 1, background: view === v.key ? C.surface : C.surface2, border: `1px solid ${view === v.key ? C.accent : C.border}`, borderRadius: 8, color: view === v.key ? C.accent : C.muted, fontSize: 13, fontWeight: view === v.key ? 700 : 400, padding: "8px", cursor: "pointer" }}>{v.label}</button>
         ))}
       </div>
 
-      {view === "diff" && (
-        <DiffTables gender={gender} schoolResults={schoolResults} config={config} completedEvents={completedEvents} />
-      )}
-      {view === "breakdown" && (
-        <EventBreakdown gender={gender} schoolResults={schoolResults} mode={mode} config={config} data={data} />
-      )}
+      {view === "diff" && <DiffTables gender={gender} schoolResults={schoolResults} config={config} completedEvents={completedEvents} />}
+      {view === "breakdown" && <EventBreakdown gender={gender} schoolResults={schoolResults} mode={mode} config={config} data={data} />}
     </div>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
 // APP ROOT
-// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [tab, setTab] = useState("input");
   const [gender, setGender] = useState("men");
@@ -962,31 +998,20 @@ export default function App() {
   const [config, setConfig] = useState({ men: { ...DEFAULT_CONFIG.men }, women: { ...DEFAULT_CONFIG.women } });
   const [data, setData] = useState(buildInitialData());
 
-  // Load from Supabase on mount (scores + config)
   useEffect(() => {
     setLoading(true);
-    Promise.all([
-      loadAllScores(buildInitialData()),
-      loadConfig(),
-    ]).then(([loadedData, loadedConfig]) => {
+    Promise.all([loadAllScores(buildInitialData()), loadConfig()]).then(([loadedData, loadedConfig]) => {
       setData(loadedData);
       if (loadedConfig) {
-        setConfig({
-          men:   { ...DEFAULT_CONFIG.men,   ...loadedConfig.men   },
-          women: { ...DEFAULT_CONFIG.women, ...loadedConfig.women },
-        });
+        setConfig({ men: { ...DEFAULT_CONFIG.men, ...loadedConfig.men }, women: { ...DEFAULT_CONFIG.women, ...loadedConfig.women } });
       }
       setLoading(false);
     });
   }, []);
 
-  // Poll Supabase every 10 seconds for real-time updates
   useEffect(() => {
     const interval = setInterval(async () => {
-      const [loadedData, loadedConfig] = await Promise.all([
-        loadAllScores(buildInitialData()),
-        loadConfig(),
-      ]);
+      const [loadedData, loadedConfig] = await Promise.all([loadAllScores(buildInitialData()), loadConfig()]);
       setData(loadedData);
       if (loadedConfig) {
         setConfig(prev => ({
@@ -998,7 +1023,6 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  // Save config to Supabase (debounced 1s)
   useEffect(() => {
     clearTimeout(configTimer.current);
     configTimer.current = setTimeout(async () => {
@@ -1008,7 +1032,6 @@ export default function App() {
     }, 1000);
   }, [config]);
 
-  // Debounced save to Supabase when skier data changes
   const saveSkierDebounced = useCallback((gender, event, school, idx, skier) => {
     const key = `${gender}-${event}-${school}-${idx}`;
     clearTimeout(saveTimers.current[key]);
@@ -1031,31 +1054,18 @@ export default function App() {
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "'Segoe UI','Helvetica Neue',sans-serif" }}>
-      {/* Sticky header */}
       <div style={{ position: "sticky", top: 0, zIndex: 100, background: C.bg + "ee", backdropFilter: "blur(12px)", borderBottom: `1px solid ${C.border}` }}>
         <div style={{ maxWidth: 900, margin: "0 auto", padding: "10px 16px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 17, fontWeight: 900, color: C.slalom, fontFamily: "'Georgia',serif", letterSpacing: "-0.02em" }}>
-              WaterSki
-            </span>
+            <span style={{ fontSize: 17, fontWeight: 900, color: C.slalom, fontFamily: "'Georgia',serif", letterSpacing: "-0.02em" }}>WaterSki</span>
             <span style={{ fontSize: 12, color: C.muted }}>団体戦</span>
-            <span style={{ fontSize: 10, background: C.accent + "22", color: C.accent, padding: "2px 8px", borderRadius: 20, border: `1px solid ${C.accent}44`, marginLeft: "auto" }}>
-              IWWF換算点
-            </span>
+            <span style={{ fontSize: 10, background: C.accent + "22", color: C.accent, padding: "2px 8px", borderRadius: 20, border: `1px solid ${C.accent}44`, marginLeft: "auto" }}>IWWF換算点</span>
             {loading && <span style={{ fontSize: 10, color: C.muted, marginLeft: 6 }}>読込中...</span>}
             {syncing && !loading && <span style={{ fontSize: 10, color: C.positive, marginLeft: 6 }}>💾保存中</span>}
           </div>
-          {/* Global gender toggle */}
           <div style={{ display: "flex", gap: 6, marginTop: 10, marginBottom: 6 }}>
             {[{ key: "men", label: "👨 男子", color: C.men }, { key: "women", label: "👩 女子", color: C.women }].map(g => (
-              <button key={g.key} onClick={() => setGender(g.key)} style={{
-                flex: 1,
-                background: gender === g.key ? g.color + "22" : "transparent",
-                border: `1px solid ${gender === g.key ? g.color : C.border}`,
-                borderRadius: 8, color: gender === g.key ? g.color : C.muted,
-                fontSize: 13, fontWeight: gender === g.key ? 700 : 400,
-                padding: "6px", cursor: "pointer", transition: "all 0.2s",
-              }}>{g.label}</button>
+              <button key={g.key} onClick={() => setGender(g.key)} style={{ flex: 1, background: gender === g.key ? g.color + "22" : "transparent", border: `1px solid ${gender === g.key ? g.color : C.border}`, borderRadius: 8, color: gender === g.key ? g.color : C.muted, fontSize: 13, fontWeight: gender === g.key ? 700 : 400, padding: "6px", cursor: "pointer", transition: "all 0.2s" }}>{g.label}</button>
             ))}
           </div>
           <div style={{ display: "flex", borderBottom: `1px solid ${C.border}` }}>
@@ -1066,7 +1076,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* Main content */}
       <div style={{ maxWidth: 900, margin: "0 auto", padding: 16 }}>
         {loading && (
           <div style={{ textAlign: "center", padding: "60px 0", color: C.muted }}>
@@ -1074,15 +1083,9 @@ export default function App() {
             <div style={{ fontSize: 14 }}>データを読み込んでいます...</div>
           </div>
         )}
-        {!loading && tab === "settings" && (
-          <SettingsTab config={config} setConfig={setConfig} onReset={handleReset} gender={gender} />
-        )}
-        {!loading && tab === "input" && (
-          <InputTab config={config} data={data} setData={setData} gender={gender} saveSkierDebounced={saveSkierDebounced} />
-        )}
-        {!loading && tab === "result" && (
-          <ResultTab config={config} data={data} gender={gender} />
-        )}
+        {!loading && tab === "settings" && <SettingsTab config={config} setConfig={setConfig} onReset={handleReset} gender={gender} />}
+        {!loading && tab === "input"    && <InputTab config={config} data={data} setData={setData} gender={gender} saveSkierDebounced={saveSkierDebounced} />}
+        {!loading && tab === "result"   && <ResultTab config={config} data={data} gender={gender} />}
       </div>
 
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "0 16px 40px" }}>

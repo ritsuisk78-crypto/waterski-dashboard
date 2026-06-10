@@ -57,8 +57,14 @@ function formatScore(event, scoreRaw) {
   if (!scoreRaw || scoreRaw === "null") return null;
   if (event === "slalom") {
     const p = scoreRaw.split("/");
-    if (p.length === 3) return `${p[0]}ブイ @${p[2]}m`;
-    if (p.length === 2) return `${p[0]}ブイ @${p[1]}m`;
+    if (p.length === 3) {
+      // ロープ長が18.25mより短い場合はショートロープ → ロープ長を表示
+      const rope = parseFloat(p[2]);
+      if (rope < 18.25) return `${p[0]}ブイ @${p[2]}m`;
+      // 通常は速度を表示
+      return `${p[0]}ブイ @${p[1]}km`;
+    }
+    if (p.length === 2) return `${p[0]}ブイ @${p[1]}km`;
     return scoreRaw;
   }
   if (event === "trick") return `${Number(scoreRaw).toLocaleString()}点`;

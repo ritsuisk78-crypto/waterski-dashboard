@@ -31,6 +31,12 @@ async function loadPlayerByKanji(kanjiInput) {
   } catch(e) { console.error("loadPlayerByKanji", e); return null; }
 }
 
+function safeJsonParse(val) {
+  if (!val) return [];
+  if (Array.isArray(val)) return val;
+  try { return JSON.parse(val); } catch { return []; }
+}
+
 async function loadPlayerResults(playerId) {
   try {
     const rows = await sbFetch(
@@ -276,7 +282,7 @@ function PlayerHistoryPopup({ kanjiInput, onClose }) {
   const compIds = COMP_ORDER.filter(cid => matrix[cid]);
   const latestComp = compIds[compIds.length - 1];
 
-  const playerEvents = player ? JSON.parse(player.events || "[]") : [];
+  const playerEvents = player ? safeJsonParse(player.events) : [];
 
   return (
     <div
@@ -408,7 +414,7 @@ function PlayerHistoryPopup({ kanjiInput, onClose }) {
         {/* リザルト英語表記 */}
         {player?.en_names && !loading && (
           <div style={{ marginTop: 10, fontSize: 10, color: C.muted + "99", textAlign: "center" }}>
-            {JSON.parse(player.en_names).join(" / ")}
+            {safeJsonParse(player.en_names).join(" / ")}
           </div>
         )}
       </div>

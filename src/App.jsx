@@ -955,45 +955,58 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const saveTimers = useRef({});
+  const configTimer = useRef(null);
 
-  const initialData = buildInitialData();
-  const [config, setConfig] = useState(() => {
-    const stored = loadFromStorage();
-    if (stored.config) {
-      return {
-        men:   { ...DEFAULT_CONFIG.men,   ...stored.config.men   },
-        women: { ...DEFAULT_CONFIG.women, ...stored.config.women },
-      };
-    }
-    return { men: { ...DEFAULT_CONFIG.men }, women: { ...DEFAULT_CONFIG.women } };
-  });
-  const [data, setData] = useState(initialData);
+  const [config, setConfig] = useState({ men: { ...DEFAULT_CONFIG.men }, women: { ...DEFAULT_CONFIG.women } });
+  const [data, setData] = useState(buildInitialData());
 
-  // Load from Supabase on mount
+  // Load from Supabase on mount (scores + config)
   useEffect(() => {
     setLoading(true);
-    loadAllScores(initialData).then(loaded => {
-      setData(loaded);
+    Promise.all([
+      loadAllScores(buildInitialData()),
+      loadConfig(),
+    ]).then(([loadedData, loadedConfig]) => {
+      setData(loadedData);
+      if (loadedConfig) {
+        setConfig({
+          men:   { ...DEFAULT_CONFIG.men,   ...loadedConfig.men   },
+          women: { ...DEFAULT_CONFIG.women, ...loadedConfig.women },
+        });
+      }
       setLoading(false);
     });
   }, []);
 
   // Poll Supabase every 10 seconds for real-time updates
   useEffect(() => {
-    const interval = setInterval(() => {
-      loadAllScores(buildInitialData()).then(loaded => {
-        setData(loaded);
-      });
+    const interval = setInterval(async () => {
+      const [loadedData, loadedConfig] = await Promise.all([
+        loadAllScores(buildInitialData()),
+        loadConfig(),
+      ]);
+      setData(loadedData);
+      if (loadedConfig) {
+        setConfig(prev => ({
+          men:   { ...DEFAULT_CONFIG.men,   ...loadedConfig.men,   pin: { ...prev.men.pin,   ...loadedConfig.men?.pin   } },
+          women: { ...DEFAULT_CONFIG.women, ...loadedConfig.women, pin: { ...prev.women.pin, ...loadedConfig.women?.pin } },
+        }));
+      }
     }, 10000);
     return () => clearInterval(interval);
   }, []);
 
-  // Save config to localStorage
+  // Save config to Supabase (debounced 1s)
   useEffect(() => {
-    saveToStorage(null, config);
+    clearTimeout(configTimer.current);
+    configTimer.current = setTimeout(async () => {
+      setSyncing(true);
+      await saveConfig(config);
+      setSyncing(false);
+    }, 1000);
   }, [config]);
 
-  // Debounced save to Supabase when data changes
+  // Debounced save to Supabase when skier data changes
   const saveSkierDebounced = useCallback((gender, event, school, idx, skier) => {
     const key = `${gender}-${event}-${school}-${idx}`;
     clearTimeout(saveTimers.current[key]);
@@ -1004,11 +1017,13 @@ export default function App() {
     }, 800);
   }, []);
 
-  const handleReset = () => {
+  const handleReset = async () => {
     if (window.confirm("全データをリセットしますか？この操作は元に戻せません。")) {
       clearStorage();
-      setConfig({ men: { ...DEFAULT_CONFIG.men }, women: { ...DEFAULT_CONFIG.women } });
+      const resetConfig = { men: { ...DEFAULT_CONFIG.men }, women: { ...DEFAULT_CONFIG.women } };
+      setConfig(resetConfig);
       setData(buildInitialData());
+      await saveConfig(resetConfig);
     }
   };
 

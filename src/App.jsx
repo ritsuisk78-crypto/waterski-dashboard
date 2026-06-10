@@ -23,9 +23,11 @@ async function loadPlayerByKanji(kanjiInput) {
   const kanji = kanjiInput.replace(/[（(]\d+[）)]/g, "").trim();
   if (!kanji) return null;
   try {
-    const encoded = encodeURIComponent(kanji);
-    const rows = await sbFetch(`players?kanji=ilike.*${encoded}*&select=*&limit=1`);
-    return rows && rows.length > 0 ? rows[0] : null;
+    // 全件取得してJS側でマッチング（日本語ILIKEのエンコード問題を回避）
+    const rows = await sbFetch("players?select=*");
+    if (!rows || rows.length === 0) return null;
+    const matched = rows.find(p => p.kanji && p.kanji.includes(kanji));
+    return matched || null;
   } catch(e) { console.error("loadPlayerByKanji", e); return null; }
 }
 

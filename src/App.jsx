@@ -135,9 +135,11 @@ function applyHandicap(score, event, handicap) {
 function calcConv(rawScore, event, pin, handicap) {
   const score = applyHandicap(rawScore, event, handicap);
   if (score === null || score === undefined) return null;
-  const v = parseFloat(score), p = parseFloat(pin);
-  if (isNaN(v) || isNaN(p) || p <= 0) return null;
-  return Math.min(Math.round((v * 1000) / p), 1000);
+  const v = parseFloat(score);
+  // ジャンプはピン想定にもハンデを引く
+  const effectivePin = event === "jump" ? Math.max(0, parseFloat(pin) - parseFloat(handicap)) : parseFloat(pin);
+  if (isNaN(v) || isNaN(effectivePin) || effectivePin <= 0) return null;
+  return Math.min(Math.round((v * 1000) / effectivePin), 1000);
 }
 
 function getEffectiveScore(sk, mode) {

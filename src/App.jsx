@@ -1098,10 +1098,15 @@ function SokuhoTab() {
 
   // Xウィジェットを再レンダリング
   useEffect(() => {
+  const tryLoad = () => {
     if (window.twttr && window.twttr.widgets) {
       window.twttr.widgets.load();
+    } else {
+      setTimeout(tryLoad, 500);
     }
-  });
+  };
+  tryLoad();
+}, []);
 
   const iwwfLiveUrl = compCode
     ? `https://www.iwwfed-ea.org/competition.php?cc=T-${compCode}&page=live`

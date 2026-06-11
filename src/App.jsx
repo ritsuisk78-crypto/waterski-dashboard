@@ -99,7 +99,7 @@ async function saveSkier(gender, event, school, idx, skier) {
 
 async function loadConfig() {
   try {
-    const rows = await sbFetch("app_config?select=*");
+    const rows = await sbFetch("app_config?key=eq.config&select=*");
     if (rows && rows.length > 0) return JSON.parse(rows[0].value);
   } catch {}
   return null;
@@ -1274,20 +1274,36 @@ export default function App() {
   const [configSaving, setConfigSaving] = useState(false);
   const [configSaved,  setConfigSaved]  = useState(false);
 
+  const configSaving_ref = useRef(false);
+
   useEffect(() => {
     const interval = setInterval(async () => {
       const loadedData = await loadAllScores(buildInitialData());
       setData(loadedData);
+      // 保存中でなければconfigも更新（他デバイスの変更を反映）
+      if (!configSaving_ref.current) {
+        const loadedConfig = await loadConfig();
+        if (loadedConfig) {
+          setConfig({
+            men:   { ...DEFAULT_CONFIG.men,   ...loadedConfig.men   },
+            women: { ...DEFAULT_CONFIG.women, ...loadedConfig.women },
+          });
+        }
+      }
     }, 10000);
     return () => clearInterval(interval);
   }, []);
 
   const handleSaveConfig = async () => {
+    configSaving_ref.current = true;
     setConfigSaving(true);
     await saveConfig(config);
     setConfigSaving(false);
     setConfigSaved(true);
-    setTimeout(() => setConfigSaved(false), 2000);
+    setTimeout(() => {
+      setConfigSaved(false);
+      configSaving_ref.current = false;
+    }, 3000);
   };
 
   const saveSkierDebounced = useCallback((gender, event, school, idx, skier) => {

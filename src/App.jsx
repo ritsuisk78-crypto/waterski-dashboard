@@ -1217,7 +1217,7 @@ function SokuhoTab() {
         )}
       </div>
 
-      {/* Xタイムライン */}
+     {/* Xタイムライン */}
       <div style={{ background: C.surface, border: "1px solid #1e2a4a", borderRadius: 12, overflow: "hidden", marginBottom: 12 }}>
         <div style={{ background: "#0a1a30", padding: "9px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: C.slalom, display: "flex", alignItems: "center", gap: 6 }}>
@@ -1226,17 +1226,11 @@ function SokuhoTab() {
           </div>
           <a href="https://twitter.com/JCWFgakuren" target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, color: "#4a6a9a", textDecoration: "none", border: "1px solid #1e2a4a", borderRadius: 4, padding: "2px 7px" }}>開く ↗</a>
         </div>
-        <div>
-          <a
-            className="twitter-timeline"
-            data-theme="dark"
-            data-height="300"
-            data-chrome="noheader nofooter noborders"
-            href="https://twitter.com/JCWFgakuren"
-          >
-            ポストを読み込み中...
-          </a>
-        </div>
+        <iframe
+          src="https://syndication.twitter.com/srv/timeline-profile/screen-name/JCWFgakuren?dnt=true&theme=dark"
+          style={{ width: "100%", height: 300, border: "none" }}
+          title="X Timeline"
+        />
       </div>
 
       {/* 結果ページボタン */}

@@ -20,16 +20,14 @@ async function sbFetch(path, options = {}) {
 
 // ─── 選手実績ローダー ───────────────────────────────────────────
 async function loadPlayerByKanji(kanjiInput) {
-  // 学年・スペース・記号を除去して名前のみ抽出
   const kanji = kanjiInput
-    .replace(/[（(][^）)]*[）)]/g, "")  // （4年）（3）などを除去
-    .replace(/[　\s]/g, "")              // 全角・半角スペース除去
+    .replace(/[（(][^）)]*[）)]/g, "")
+    .replace(/[　\s]/g, "")
     .trim();
   if (!kanji) return null;
   try {
     const rows = await sbFetch("players?select=*");
     if (!rows || rows.length === 0) return null;
-    // 完全一致優先、次に部分一致
     const exact = rows.find(p => p.kanji && p.kanji === kanji);
     if (exact) return exact;
     const partial = rows.find(p => p.kanji && p.kanji.includes(kanji));
@@ -52,16 +50,13 @@ async function loadPlayerResults(playerId) {
   } catch(e) { console.error("loadPlayerResults", e); return []; }
 }
 
-// ─── スコア表示フォーマット ──────────────────────────────────────
 function formatScore(event, scoreRaw) {
   if (!scoreRaw || scoreRaw === "null") return null;
   if (event === "slalom") {
     const p = scoreRaw.split("/");
     if (p.length === 3) {
-      // ロープ長が18.25mより短い場合はショートロープ → ロープ長を表示
       const rope = parseFloat(p[2]);
       if (rope < 18.25) return `${p[0]}ブイ @${p[2]}m`;
-      // 通常は速度を表示
       return `${p[0]}ブイ @${p[1]}km`;
     }
     if (p.length === 2) return `${p[0]}ブイ @${p[1]}km`;
@@ -72,7 +67,6 @@ function formatScore(event, scoreRaw) {
   return scoreRaw;
 }
 
-// ─── 既存コードと同一定数 ────────────────────────────────────────
 async function loadAllScores(initialData) {
   try {
     const rows = await sbFetch("scores?select=*");
@@ -119,6 +113,25 @@ async function saveConfig(config) {
       body: JSON.stringify({ key: "config", value: JSON.stringify(config) }),
     });
   } catch(e) { console.error("saveConfig error", e); }
+}
+
+// ─── 大会コード設定（Supabase） ──────────────────────────────────
+async function loadCompConfig() {
+  try {
+    const rows = await sbFetch("app_config?key=eq.comp_config&select=*");
+    if (rows && rows.length > 0) return JSON.parse(rows[0].value);
+  } catch {}
+  return null;
+}
+
+async function saveCompConfig(compConfig) {
+  try {
+    await sbFetch("app_config?on_conflict=key", {
+      method: "POST",
+      headers: { "Prefer": "resolution=merge-duplicates" },
+      body: JSON.stringify({ key: "comp_config", value: JSON.stringify(compConfig) }),
+    });
+  } catch(e) { console.error("saveCompConfig error", e); }
 }
 
 const C = {
@@ -257,7 +270,7 @@ function clearStorage() {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// PLAYER HISTORY POPUP（新規追加）
+// PLAYER HISTORY POPUP
 // ─────────────────────────────────────────────────────────────────
 function PlayerHistoryPopup({ kanjiInput, onClose }) {
   const [player,  setPlayer]  = useState(null);
@@ -284,7 +297,6 @@ function PlayerHistoryPopup({ kanjiInput, onClose }) {
     });
   }, [kanjiInput]);
 
-  // results を competition_id → event → score_raw に整理
   const matrix = {};
   for (const r of results) {
     if (!matrix[r.competition_id]) matrix[r.competition_id] = {};
@@ -293,7 +305,6 @@ function PlayerHistoryPopup({ kanjiInput, onClose }) {
 
   const compIds = COMP_ORDER.filter(cid => matrix[cid]);
   const latestComp = compIds[compIds.length - 1];
-
   const playerEvents = player ? safeJsonParse(player.events) : [];
 
   return (
@@ -316,10 +327,7 @@ function PlayerHistoryPopup({ kanjiInput, onClose }) {
           maxHeight: "80vh", overflowY: "auto",
         }}
       >
-        {/* ハンドル */}
         <div style={{ width: 36, height: 4, background: C.border, borderRadius: 2, margin: "0 auto 16px" }} />
-
-        {/* ヘッダー */}
         <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 20 }}>
           <div style={{
             width: 42, height: 42, borderRadius: "50%", flexShrink: 0,
@@ -342,8 +350,6 @@ function PlayerHistoryPopup({ kanjiInput, onClose }) {
           </div>
           <button onClick={onClose} style={{ background: "none", border: "none", color: C.muted, fontSize: 22, cursor: "pointer", lineHeight: 1 }}>✕</button>
         </div>
-
-        {/* 担当種目バッジ */}
         {playerEvents.length > 0 && (
           <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
             {playerEvents.map(e => (
@@ -356,30 +362,22 @@ function PlayerHistoryPopup({ kanjiInput, onClose }) {
             ))}
           </div>
         )}
-
-        {/* ローディング */}
         {loading && (
           <div style={{ textAlign: "center", padding: "40px 0", color: C.muted }}>
             <div style={{ fontSize: 24, marginBottom: 8 }}>🌊</div>
             <div style={{ fontSize: 13 }}>読み込み中...</div>
           </div>
         )}
-
-        {/* エラー */}
         {!loading && error && (
           <div style={{ background: C.negative + "22", border: `1px solid ${C.negative}44`, borderRadius: 10, padding: 14, color: C.negative, fontSize: 13 }}>
             {error}
           </div>
         )}
-
-        {/* 記録なし */}
         {!loading && !error && compIds.length === 0 && (
           <div style={{ textAlign: "center", padding: "32px 0", color: C.muted, fontSize: 13 }}>
             過去の大会記録がありません
           </div>
         )}
-
-        {/* 大会別カード */}
         {!loading && !error && compIds.map(cid => {
           const isLatest = cid === latestComp;
           return (
@@ -389,13 +387,9 @@ function PlayerHistoryPopup({ kanjiInput, onClose }) {
               borderRadius: 12, padding: "12px 14px", marginBottom: 10,
             }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: C.accent }}>
-                  {COMP_SHORT[cid] || cid}
-                </span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: C.accent }}>{COMP_SHORT[cid] || cid}</span>
                 {isLatest && (
-                  <span style={{ fontSize: 10, background: C.accent + "22", color: C.accent, border: `1px solid ${C.accent}44`, borderRadius: 10, padding: "1px 7px" }}>
-                    最新
-                  </span>
+                  <span style={{ fontSize: 10, background: C.accent + "22", color: C.accent, border: `1px solid ${C.accent}44`, borderRadius: 10, padding: "1px 7px" }}>最新</span>
                 )}
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
@@ -409,9 +403,7 @@ function PlayerHistoryPopup({ kanjiInput, onClose }) {
                       border: `1px solid ${hasScore ? ECFG[ev].color + "44" : C.border}`,
                       borderRadius: 8, padding: "8px 10px",
                     }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, color: hasScore ? ECFG[ev].color : C.muted, marginBottom: 4 }}>
-                        {ECFG[ev].label}
-                      </div>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: hasScore ? ECFG[ev].color : C.muted, marginBottom: 4 }}>{ECFG[ev].label}</div>
                       <div style={{ fontSize: 12, fontFamily: "monospace", color: hasScore ? C.text : C.muted, fontWeight: hasScore ? 700 : 400, lineHeight: 1.4 }}>
                         {formatted || "—"}
                       </div>
@@ -422,8 +414,6 @@ function PlayerHistoryPopup({ kanjiInput, onClose }) {
             </div>
           );
         })}
-
-        {/* リザルト英語表記 */}
         {player?.en_names && !loading && (
           <div style={{ marginTop: 10, fontSize: 10, color: C.muted + "99", textAlign: "center" }}>
             {safeJsonParse(player.en_names).join(" / ")}
@@ -505,7 +495,7 @@ function NumField({ value, onChange, placeholder, step, style = {} }) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// PLAYER POPUP（既存 + 選手名クリックで実績表示を追加）
+// PLAYER POPUP
 // ─────────────────────────────────────────────────────────────────
 function PlayerPopup({ gender, school, event, mode, config, data, onClose }) {
   const cfg  = config[gender];
@@ -567,9 +557,7 @@ function PlayerPopup({ gender, school, event, mode, config, data, onClose }) {
                   display: "flex", alignItems: "center", justifyContent: "center",
                   fontSize: 11, fontWeight: 700, color: isAdopted ? C.bg : C.muted,
                 }}>{i + 1}</div>
-
                 <div style={{ flex: 1 }}>
-                  {/* 選手名クリックで実績ポップアップ */}
                   <div
                     onClick={() => sk.name && setHistoryTarget(sk.name)}
                     style={{
@@ -580,13 +568,10 @@ function PlayerPopup({ gender, school, event, mode, config, data, onClose }) {
                     }}
                   >
                     {sk.name || `選手${i + 1}`}
-                    {sk.name && (
-                      <span style={{ fontSize: 10, color: C.muted, opacity: 0.7 }}>📋</span>
-                    )}
+                    {sk.name && <span style={{ fontSize: 10, color: C.muted, opacity: 0.7 }}>📋</span>}
                   </div>
                   <div style={{ fontSize: 11, color: C.muted }}>想定: {sk.planned || "—"}{ecfg.unit}</div>
                 </div>
-
                 <div style={{ textAlign: "right" }}>
                   <div style={{ fontSize: 13, fontFamily: "monospace", fontWeight: 700, color: hasActual ? ecfg.color : C.muted }}>
                     {displayScore}
@@ -613,8 +598,6 @@ function PlayerPopup({ gender, school, event, mode, config, data, onClose }) {
           </div>
         </div>
       </div>
-
-      {/* 選手名タップで実績ポップアップ */}
       {historyTarget && (
         <PlayerHistoryPopup kanjiInput={historyTarget} onClose={() => setHistoryTarget(null)} />
       )}
@@ -623,7 +606,7 @@ function PlayerPopup({ gender, school, event, mode, config, data, onClose }) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// SETTINGS TAB（既存のまま）
+// SETTINGS TAB
 // ─────────────────────────────────────────────────────────────────
 function SettingsTab({ config, setConfig, onReset, gender }) {
   const cfg = config[gender];
@@ -666,7 +649,7 @@ function SettingsTab({ config, setConfig, onReset, gender }) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// INPUT TAB（実績ボタン追加）
+// INPUT TAB
 // ─────────────────────────────────────────────────────────────────
 function InputTab({ config, data, setData, gender, saveSkierDebounced }) {
   const [event,  setEvent]  = useState("slalom");
@@ -690,7 +673,6 @@ function InputTab({ config, data, setData, gender, saveSkierDebounced }) {
 
   return (
     <div>
-      {/* 種目選択 */}
       <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
         {EVENTS.map(e => {
           const c = ECFG[e];
@@ -711,7 +693,6 @@ function InputTab({ config, data, setData, gender, saveSkierDebounced }) {
         })}
       </div>
 
-      {/* 学校選択 */}
       <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
         {SCHOOLS.map(s => {
           const skrs = data[gender]?.[event]?.[s] || [];
@@ -734,7 +715,6 @@ function InputTab({ config, data, setData, gender, saveSkierDebounced }) {
         })}
       </div>
 
-      {/* 進捗バー */}
       <div style={{ background: C.surface, border: `1px solid ${ecfg.color}33`, borderRadius: 10, padding: "10px 14px", marginBottom: 14 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
           <span style={{ fontSize: 12, color: ecfg.color, fontWeight: 700 }}>{ecfg.label}　{school}</span>
@@ -746,7 +726,6 @@ function InputTab({ config, data, setData, gender, saveSkierDebounced }) {
         {event === "jump" && <div style={{ fontSize: 10, color: C.jump, marginTop: 6 }}>※ Jハンデ -{cfg.handicap}m を引いて換算点を計算します</div>}
       </div>
 
-      {/* 選手カード */}
       {skiers.map((sk, i) => {
         const hasActual = sk.actual !== "";
         const score = hasActual ? sk.actual : sk.planned !== "" ? sk.planned : null;
@@ -763,7 +742,6 @@ function InputTab({ config, data, setData, gender, saveSkierDebounced }) {
                 placeholder={`選手${i + 1}（例: 内藤駿（3））`}
                 style={{ background: "transparent", border: "none", borderBottom: `1px solid ${C.border}`, color: C.text, fontSize: 14, fontWeight: 700, padding: "2px 0", outline: "none", flex: 1 }}
               />
-              {/* 実績ボタン：名前があるときのみ表示 */}
               {sk.name && (
                 <button
                   onClick={() => setHistoryTarget(sk.name)}
@@ -796,7 +774,6 @@ function InputTab({ config, data, setData, gender, saveSkierDebounced }) {
         );
       })}
 
-      {/* 実績ポップアップ */}
       {historyTarget && (
         <PlayerHistoryPopup kanjiInput={historyTarget} onClose={() => setHistoryTarget(null)} />
       )}
@@ -805,7 +782,7 @@ function InputTab({ config, data, setData, gender, saveSkierDebounced }) {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// RESULT TAB（既存のまま）
+// RESULT TAB
 // ─────────────────────────────────────────────────────────────────
 function DiffTables({ gender, schoolResults, config, completedEvents }) {
   const cfg  = config[gender];
@@ -1005,6 +982,267 @@ function ResultTab({ config, data, gender }) {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// 速報タブ：結果ボタン
+// ─────────────────────────────────────────────────────────────────
+function ResultButtons({ compCode }) {
+  const [open, setOpen] = useState(null);
+
+  const events = [
+    { key: "ms", gender: "men",   event: "slalom", label: "スラローム", gLabel: "男子" },
+    { key: "ws", gender: "women", event: "slalom", label: "スラローム", gLabel: "女子" },
+    { key: "mt", gender: "men",   event: "trick",  label: "トリック",   gLabel: "男子" },
+    { key: "wt", gender: "women", event: "trick",  label: "トリック",   gLabel: "女子" },
+    { key: "mj", gender: "men",   event: "jump",   label: "ジャンプ",   gLabel: "男子" },
+    { key: "wj", gender: "women", event: "jump",   label: "ジャンプ",   gLabel: "女子" },
+  ];
+
+  function getPdfUrl(code, genderKey, eventKey, round) {
+    const year = code.slice(0, 2);
+    const base = `https://www.iwwfed-ea.org/classic/${year}/${code}/`;
+    const gStr = genderKey === "men" ? "men" : "women";
+    if (round === "round1") return `${base}${gStr}_${eventKey}_round_1_results.pdf`;
+    return `${base}${gStr}_${eventKey}_overall_results.pdf`;
+  }
+
+  function toggle(key) { setOpen(prev => prev === key ? null : key); }
+
+  return (
+    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden", marginBottom: 12 }}>
+      <div style={{ background: "#0d1e3a", padding: "9px 14px", fontSize: 11, fontWeight: 700, color: C.slalom, letterSpacing: "0.06em" }}>
+        📄 結果ページ（PDF）
+      </div>
+      <div style={{ padding: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+        {events.map(ev => {
+          const isOpen = open === ev.key;
+          const ecfg = ECFG[ev.event];
+          return (
+            <React.Fragment key={ev.key}>
+              <div
+                onClick={() => toggle(ev.key)}
+                style={{
+                  background: isOpen ? "#1a2f55" : "#141d35",
+                  border: `1px solid ${isOpen ? C.slalom : "#1e2a4a"}`,
+                  borderRadius: 7, padding: "10px 8px",
+                  textAlign: "center", cursor: "pointer", transition: "all 0.15s",
+                }}
+              >
+                <span style={{ display: "block", fontSize: 9, color: isOpen ? C.slalom : "#4a6a9a", marginBottom: 2 }}>{ev.gLabel}</span>
+                <span style={{ display: "block", fontSize: 12, color: isOpen ? C.slalom : ecfg.color, fontWeight: 600 }}>{ev.label}</span>
+                <span style={{ fontSize: 9, color: isOpen ? C.slalom : "#4a6a9a", marginTop: 3, display: "block" }}>{isOpen ? "▲" : "▼"}</span>
+              </div>
+
+              {isOpen && (
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <div style={{ background: "#0a1020", border: "1px solid #1e3060", borderRadius: 8, padding: 8, display: "flex", flexDirection: "column", gap: 5 }}>
+                    <div style={{ fontSize: 10, color: "#4a6a9a", padding: "2px 6px 6px", borderBottom: "1px solid #1a2540", marginBottom: 2 }}>
+                      {ev.gLabel}{ev.label} — 結果を選択
+                    </div>
+                    {["round1", "overall"].map(round => (
+                      compCode ? (
+                        <a key={round} href={getPdfUrl(compCode, ev.gender, ev.event, round)} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#141d35", border: "1px solid #1e2a4a", borderRadius: 6, padding: "9px 12px", cursor: "pointer" }}>
+                            <div>
+                              <div style={{ fontSize: 12, color: C.text }}>{round === "round1" ? "Round 1 結果" : "Overall（最終結果）"}</div>
+                              <div style={{ fontSize: 10, color: "#4a6a9a" }}>{round === "round1" ? "1本目の全選手スコア" : "総合順位・確定スコア"}</div>
+                            </div>
+                            <span style={{ fontSize: 9, background: "#1a3060", color: C.slalom, padding: "2px 6px", borderRadius: 3 }}>PDF</span>
+                          </div>
+                        </a>
+                      ) : (
+                        <div key={round} style={{ background: "#141d35", border: "1px solid #1e2a4a", borderRadius: 6, padding: "9px 12px", opacity: 0.4 }}>
+                          <div style={{ fontSize: 12, color: C.muted }}>{round === "round1" ? "Round 1 結果" : "Overall（最終結果）"}</div>
+                        </div>
+                      )
+                    ))}
+                  </div>
+                </div>
+              )}
+            </React.Fragment>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// 速報タブ本体
+// ─────────────────────────────────────────────────────────────────
+function SokuhoTab() {
+  const [compCode, setCompCode] = useState("");
+  const [compName, setCompName] = useState("");
+  const [inputCode, setInputCode] = useState("");
+  const [inputName, setInputName] = useState("");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    loadCompConfig().then(cfg => {
+      if (cfg) {
+        setCompCode(cfg.code || "");
+        setCompName(cfg.name || "");
+        setInputCode(cfg.code || "");
+        setInputName(cfg.name || "");
+      }
+    });
+    // X widgets.js を動的に読み込む
+    if (!document.getElementById("twitter-wjs")) {
+      const s = document.createElement("script");
+      s.id = "twitter-wjs";
+      s.src = "https://platform.twitter.com/widgets.js";
+      s.async = true;
+      document.body.appendChild(s);
+    }
+  }, []);
+
+  // Xウィジェットを再レンダリング
+  useEffect(() => {
+    if (window.twttr && window.twttr.widgets) {
+      window.twttr.widgets.load();
+    }
+  });
+
+  const iwwfLiveUrl = compCode
+    ? `https://www.iwwfed-ea.org/competition.php?cc=T-${compCode}&page=live`
+    : null;
+
+  const previewUrl = inputCode
+    ? `https://www.iwwfed-ea.org/competition.php?cc=T-${inputCode}&page=live`
+    : null;
+
+  async function handleSave() {
+    setSaving(true);
+    const cfg = { code: inputCode.trim().toUpperCase(), name: inputName.trim() };
+    await saveCompConfig(cfg);
+    setCompCode(cfg.code);
+    setCompName(cfg.name);
+    setSaving(false);
+    setSaved(true);
+    setTimeout(() => { setSaved(false); setSettingsOpen(false); }, 1200);
+  }
+
+  return (
+    <div>
+      {/* 大会コード設定 */}
+      <div style={{ marginBottom: 12 }}>
+        <button
+          onClick={() => setSettingsOpen(v => !v)}
+          style={{
+            width: "100%", background: settingsOpen ? "#0d1e3a" : C.surface,
+            border: `1px solid ${settingsOpen ? C.slalom : C.border}`,
+            borderRadius: settingsOpen ? "10px 10px 0 0" : 10,
+            color: settingsOpen ? C.slalom : C.muted,
+            fontSize: 12, fontWeight: 700, padding: "10px 14px",
+            cursor: "pointer", display: "flex", alignItems: "center", gap: 8,
+          }}
+        >
+          <span>⚙️ 大会コード設定</span>
+          {compCode && !settingsOpen && (
+            <span style={{ fontSize: 10, background: "#1a3060", color: C.slalom, padding: "2px 8px", borderRadius: 10, marginLeft: "auto" }}>
+              T-{compCode}
+            </span>
+          )}
+          <span style={{ marginLeft: "auto", fontSize: 10 }}>{settingsOpen ? "▲" : "▼"}</span>
+        </button>
+
+        {settingsOpen && (
+          <div style={{ background: C.surface, border: `1px solid #2a3a5a`, borderTop: "none", borderRadius: "0 0 10px 10px", padding: 14 }}>
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 11, color: "#4a6a9a", marginBottom: 6 }}>大会コード（IWWF）</div>
+              <div style={{ display: "flex" }}>
+                <span style={{ background: "#0a1020", border: "1px solid #1e2a4a", borderRight: "none", borderRadius: "6px 0 0 6px", color: "#3a4a6a", fontSize: 12, padding: "8px 10px" }}>T-</span>
+                <input
+                  type="text" value={inputCode}
+                  onChange={e => setInputCode(e.target.value.toUpperCase())}
+                  placeholder="26JPN007" maxLength={10}
+                  style={{ flex: 1, background: "#0a1020", border: "1px solid #1e2a4a", borderRadius: "0 6px 6px 0", color: C.text, fontSize: 13, padding: "8px 10px", outline: "none", fontFamily: "monospace" }}
+                />
+              </div>
+              <div style={{ marginTop: 6, background: "#060c1a", border: "1px solid #1a2035", borderRadius: 6, padding: "7px 10px", fontSize: 10, color: previewUrl ? "#5a8aaa" : "#3a4a6a", fontFamily: "monospace", wordBreak: "break-all" }}>
+                {previewUrl || "大会コードを入力するとURLが表示されます"}
+              </div>
+              <div style={{ fontSize: 10, color: "#3a4560", marginTop: 4, lineHeight: 1.5 }}>
+                IWWFのURLから確認。例）<span style={{ color: C.slalom, fontFamily: "monospace" }}>cc=T-26JPN007</span> の <span style={{ color: C.slalom, fontFamily: "monospace" }}>26JPN007</span> 部分
+              </div>
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 11, color: "#4a6a9a", marginBottom: 6 }}>大会名（表示用）</div>
+              <input
+                type="text" value={inputName}
+                onChange={e => setInputName(e.target.value)}
+                placeholder="例：関東学生春季大会 CS2"
+                style={{ width: "100%", background: "#0a1020", border: "1px solid #1e2a4a", borderRadius: 6, color: C.text, fontSize: 13, padding: "8px 10px", outline: "none", boxSizing: "border-box" }}
+              />
+            </div>
+            <button
+              onClick={handleSave} disabled={saving}
+              style={{ width: "100%", background: saved ? C.positive + "22" : "#1a3a6a", border: `1px solid ${saved ? C.positive : C.slalom}`, borderRadius: 8, color: saved ? C.positive : C.slalom, fontSize: 13, fontWeight: 700, padding: "11px", cursor: "pointer" }}
+            >
+              {saved ? "✓ 保存しました" : saving ? "保存中..." : "保存する"}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* 大会ステータス */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", background: "#0a1020", borderRadius: 8, marginBottom: 12, fontSize: 11, color: compCode ? "#5abf8a" : "#4a5580" }}>
+        <span style={{ width: 7, height: 7, borderRadius: "50%", background: compCode ? "#4aaa7a" : "#5a5a6a", display: "inline-block", flexShrink: 0 }} />
+        <span>{compCode ? `${compName || "大会"}（T-${compCode}）` : "大会コード未設定 — ⚙️から設定してください"}</span>
+      </div>
+
+      {/* IWWFライブスコア */}
+      <div style={{ background: C.surface, border: "1px solid #1e3a6e", borderRadius: 12, overflow: "hidden", marginBottom: 12 }}>
+        <div style={{ background: "#0d2045", padding: "9px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 700, color: C.slalom }}>
+            <span style={{ width: 7, height: 7, borderRadius: "50%", background: compCode ? "#ff4444" : "#5a5a6a", display: "inline-block", animation: compCode ? "liveblink 1.2s infinite" : "none" }} />
+            IWWF ライブスコア
+          </div>
+          {iwwfLiveUrl && (
+            <a href={iwwfLiveUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, color: "#4a6a9a", textDecoration: "none", border: "1px solid #1e3060", borderRadius: 4, padding: "2px 7px" }}>別窓 ↗</a>
+          )}
+        </div>
+        {compCode ? (
+          <iframe src={iwwfLiveUrl} style={{ width: "100%", height: 300, border: "none", background: "#fff" }} title="IWWF Live Score" sandbox="allow-scripts allow-same-origin" />
+        ) : (
+          <div style={{ padding: "32px 16px", textAlign: "center" }}>
+            <div style={{ fontSize: 28, marginBottom: 10 }}>🏁</div>
+            <div style={{ fontSize: 12, color: "#3a4a6a", lineHeight: 1.6 }}>大会コードを設定すると<br />ライブスコアが表示されます</div>
+          </div>
+        )}
+      </div>
+
+      {/* Xタイムライン */}
+      <div style={{ background: C.surface, border: "1px solid #1e2a4a", borderRadius: 12, overflow: "hidden", marginBottom: 12 }}>
+        <div style={{ background: "#0a1a30", padding: "9px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: C.slalom, display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 13, fontWeight: 900, color: "#fff" }}>𝕏</span>
+            @JCWFgakuren 速報
+          </div>
+          <a href="https://twitter.com/JCWFgakuren" target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, color: "#4a6a9a", textDecoration: "none", border: "1px solid #1e2a4a", borderRadius: 4, padding: "2px 7px" }}>開く ↗</a>
+        </div>
+        <div>
+          <a
+            className="twitter-timeline"
+            data-theme="dark"
+            data-height="300"
+            data-chrome="noheader nofooter noborders"
+            href="https://twitter.com/JCWFgakuren"
+          >
+            ポストを読み込み中...
+          </a>
+        </div>
+      </div>
+
+      {/* 結果ページボタン */}
+      <ResultButtons compCode={compCode} />
+
+      <style>{`@keyframes liveblink { 0%,100%{opacity:1} 50%{opacity:0.15} }`}</style>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
 // APP ROOT
 // ─────────────────────────────────────────────────────────────────
 export default function App() {
@@ -1083,21 +1321,25 @@ export default function App() {
             {loading && <span style={{ fontSize: 10, color: C.muted, marginLeft: 6 }}>読込中...</span>}
             {syncing && !loading && <span style={{ fontSize: 10, color: C.positive, marginLeft: 6 }}>💾保存中</span>}
           </div>
-          <div style={{ display: "flex", gap: 6, marginTop: 10, marginBottom: 6 }}>
-            {[{ key: "men", label: "👨 男子", color: C.men }, { key: "women", label: "👩 女子", color: C.women }].map(g => (
-              <button key={g.key} onClick={() => setGender(g.key)} style={{ flex: 1, background: gender === g.key ? g.color + "22" : "transparent", border: `1px solid ${gender === g.key ? g.color : C.border}`, borderRadius: 8, color: gender === g.key ? g.color : C.muted, fontSize: 13, fontWeight: gender === g.key ? 700 : 400, padding: "6px", cursor: "pointer", transition: "all 0.2s" }}>{g.label}</button>
-            ))}
-          </div>
-          <div style={{ display: "flex", borderBottom: `1px solid ${C.border}` }}>
+          {/* 速報タブ以外は男女切替を表示 */}
+          {tab !== "sokuho" && (
+            <div style={{ display: "flex", gap: 6, marginTop: 10, marginBottom: 6 }}>
+              {[{ key: "men", label: "👨 男子", color: C.men }, { key: "women", label: "👩 女子", color: C.women }].map(g => (
+                <button key={g.key} onClick={() => setGender(g.key)} style={{ flex: 1, background: gender === g.key ? g.color + "22" : "transparent", border: `1px solid ${gender === g.key ? g.color : C.border}`, borderRadius: 8, color: gender === g.key ? g.color : C.muted, fontSize: 13, fontWeight: gender === g.key ? 700 : 400, padding: "6px", cursor: "pointer", transition: "all 0.2s" }}>{g.label}</button>
+              ))}
+            </div>
+          )}
+          <div style={{ display: "flex", borderBottom: `1px solid ${C.border}`, marginTop: tab === "sokuho" ? 10 : 0 }}>
             <AppTab label="⚙️ 設定" active={tab === "settings"} onClick={() => setTab("settings")} />
             <AppTab label="📝 入力" active={tab === "input"}    onClick={() => setTab("input")} />
             <AppTab label="📊 結果" active={tab === "result"}   onClick={() => setTab("result")} />
+            <AppTab label="📡 速報" active={tab === "sokuho"}   onClick={() => setTab("sokuho")} />
           </div>
         </div>
       </div>
 
       <div style={{ maxWidth: 900, margin: "0 auto", padding: 16 }}>
-        {loading && (
+        {loading && tab !== "sokuho" && (
           <div style={{ textAlign: "center", padding: "60px 0", color: C.muted }}>
             <div style={{ fontSize: 32, marginBottom: 12 }}>🌊</div>
             <div style={{ fontSize: 14 }}>データを読み込んでいます...</div>
@@ -1106,6 +1348,7 @@ export default function App() {
         {!loading && tab === "settings" && <SettingsTab config={config} setConfig={setConfig} onReset={handleReset} gender={gender} />}
         {!loading && tab === "input"    && <InputTab config={config} data={data} setData={setData} gender={gender} saveSkierDebounced={saveSkierDebounced} />}
         {!loading && tab === "result"   && <ResultTab config={config} data={data} gender={gender} />}
+        {tab === "sokuho"               && <SokuhoTab />}
       </div>
 
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "0 16px 40px" }}>

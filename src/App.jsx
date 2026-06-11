@@ -1261,8 +1261,8 @@ export default function App() {
       setData(loadedData);
       if (loadedConfig) {
         setConfig(prev => ({
-          men:   { ...DEFAULT_CONFIG.men,   ...loadedConfig.men,   pin: { ...prev.men.pin,   ...loadedConfig.men?.pin   } },
-          women: { ...DEFAULT_CONFIG.women, ...loadedConfig.women, pin: { ...prev.women.pin, ...loadedConfig.women?.pin } },
+         men:   { ...DEFAULT_CONFIG.men,   ...loadedConfig.men,   pin: { ...DEFAULT_CONFIG.men.pin,   ...loadedConfig.men?.pin   } },
+        women: { ...DEFAULT_CONFIG.women, ...loadedConfig.women, pin: { ...DEFAULT_CONFIG.women.pin, ...loadedConfig.women?.pin } },
         }));
       }
     }, 10000);

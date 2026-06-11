@@ -1086,27 +1086,7 @@ function SokuhoTab() {
         setInputName(cfg.name || "");
       }
     });
-    // X widgets.js を動的に読み込む
-    if (!document.getElementById("twitter-wjs")) {
-      const s = document.createElement("script");
-      s.id = "twitter-wjs";
-      s.src = "https://platform.twitter.com/widgets.js";
-      s.async = true;
-      document.body.appendChild(s);
-    }
   }, []);
-
-  // Xウィジェットを再レンダリング
-  useEffect(() => {
-  const tryLoad = () => {
-    if (window.twttr && window.twttr.widgets) {
-      window.twttr.widgets.load();
-    } else {
-      setTimeout(tryLoad, 500);
-    }
-  };
-  tryLoad();
-}, []);
 
   const iwwfLiveUrl = compCode
     ? `https://www.iwwfed-ea.org/competition.php?cc=T-${compCode}&page=live`
@@ -1217,20 +1197,36 @@ function SokuhoTab() {
         )}
       </div>
 
-    {/* Xタイムライン */}
-      <div style={{ background: C.surface, border: "1px solid #1e2a4a", borderRadius: 12, overflow: "hidden", marginBottom: 12 }}>
-        <div style={{ background: "#0a1a30", padding: "9px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: C.slalom, display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ fontSize: 13, fontWeight: 900, color: "#fff" }}>𝕏</span>
-            @JCWFgakuren 速報
+      {/* Xリンク */}
+      <a
+        href="https://twitter.com/JCWFgakuren"
+        target="_blank" rel="noopener noreferrer"
+        style={{ textDecoration: "none", display: "block", marginBottom: 12 }}
+      >
+        <div style={{ background: C.surface, border: "1px solid #1e2a4a", borderRadius: 12, overflow: "hidden" }}>
+          <div style={{ background: "#0a1a30", padding: "9px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.slalom, display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: 13, fontWeight: 900, color: "#fff" }}>𝕏</span>
+              @JCWFgakuren 速報
+            </div>
+            <span style={{ fontSize: 10, color: "#4a6a9a", border: "1px solid #1e2a4a", borderRadius: 4, padding: "2px 7px" }}>開く ↗</span>
+          </div>
+          <div style={{ background: "#000", padding: "20px 16px", display: "flex", alignItems: "center", gap: 12 }}>
+            <span style={{ fontSize: 28, fontWeight: 900, color: "#fff" }}>𝕏</span>
+            <div>
+              <div style={{ fontSize: 13, color: "#7eb8f7", fontWeight: 700, marginBottom: 4 }}>@JCWFgakuren のポストを見る</div>
+              <div style={{ fontSize: 11, color: "#4a6a9a" }}>全日本学生水上スキー連盟 — 大会速報はこちら</div>
+            </div>
+            <span style={{ marginLeft: "auto", fontSize: 18, color: "#4a6a9a" }}>→</span>
           </div>
         </div>
-        <a href="https://twitter.com/JCWFgakuren" target="_blank" rel="noopener noreferrer"
-          style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, padding: "24px 16px", textDecoration: "none", background: "#000" }}>
-          <span style={{ fontSize: 22, fontWeight: 900, color: "#fff" }}>𝕏</span>
-          <span style={{ fontSize: 13, color: "#7eb8f7", fontWeight: 700 }}>@JCWFgakuren のポストを見る →</span>
-        </a>
-      </div>
+      </a>
+
+      {/* 結果ページボタン */}
+      <ResultButtons compCode={compCode} />
+
+      <style>{`@keyframes liveblink { 0%,100%{opacity:1} 50%{opacity:0.15} }`}</style>
+    </div>
   );
 }
 

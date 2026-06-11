@@ -608,7 +608,7 @@ function PlayerPopup({ gender, school, event, mode, config, data, onClose }) {
 // ─────────────────────────────────────────────────────────────────
 // SETTINGS TAB
 // ─────────────────────────────────────────────────────────────────
-function SettingsTab({ config, setConfig, onReset, gender }) {
+function SettingsTab({ config, setConfig, onReset, onSave, saving, saved, gender }) {
   const cfg = config[gender];
   const update = (field, val) => setConfig(prev => ({ ...prev, [gender]: { ...prev[gender], [field]: val } }));
   const updatePin = (event, val) => setConfig(prev => ({ ...prev, [gender]: { ...prev[gender], pin: { ...prev[gender].pin, [event]: val } } }));
@@ -637,6 +637,23 @@ function SettingsTab({ config, setConfig, onReset, gender }) {
         </div>
         <div style={{ marginTop: 10, fontSize: 11, color: C.muted }}>現在：{cfg.out}人出・{cfg.topN}人どり　Jハンデ -{cfg.handicap}m</div>
       </div>
+
+      {/* 保存ボタン */}
+      <button
+        onClick={onSave}
+        disabled={saving}
+        style={{
+          background: saved ? C.positive + "22" : "#1a3a6a",
+          border: `1px solid ${saved ? C.positive : C.accent}`,
+          borderRadius: 10, color: saved ? C.positive : C.accent,
+          fontSize: 14, fontWeight: 700, padding: "13px",
+          cursor: "pointer", width: "100%", letterSpacing: "0.05em",
+          transition: "all 0.2s",
+        }}
+      >
+        {saved ? "✓ 保存しました" : saving ? "保存中..." : "💾 設定を保存する"}
+      </button>
+
       <div style={{ background: C.surface, border: `1px solid ${C.negative}33`, borderRadius: 12, padding: 16 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: C.negative, marginBottom: 8 }}>⚠️ データリセット</div>
         <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>全ての入力データ・設定を初期化します。この操作は元に戻せません。</div>
@@ -1239,7 +1256,6 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const saveTimers = useRef({});
-  const configTimer = useRef(null);
 
   const [config, setConfig] = useState({ men: { ...DEFAULT_CONFIG.men }, women: { ...DEFAULT_CONFIG.women } });
   const [data, setData] = useState(buildInitialData());
@@ -1255,35 +1271,24 @@ export default function App() {
     });
   }, []);
 
-  const configDirty = useRef(false);
+  const [configSaving, setConfigSaving] = useState(false);
+  const [configSaved,  setConfigSaved]  = useState(false);
 
   useEffect(() => {
     const interval = setInterval(async () => {
       const loadedData = await loadAllScores(buildInitialData());
       setData(loadedData);
-      if (!configDirty.current) {
-        const loadedConfig = await loadConfig();
-        if (loadedConfig) {
-          setConfig({
-            men:   { ...DEFAULT_CONFIG.men,   ...loadedConfig.men,   pin: { ...DEFAULT_CONFIG.men.pin,   ...loadedConfig.men?.pin   } },
-            women: { ...DEFAULT_CONFIG.women, ...loadedConfig.women, pin: { ...DEFAULT_CONFIG.women.pin, ...loadedConfig.women?.pin } },
-          });
-        }
-      }
     }, 10000);
     return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    configDirty.current = true;
-    clearTimeout(configTimer.current);
-    configTimer.current = setTimeout(async () => {
-      setSyncing(true);
-      await saveConfig(config);
-      setSyncing(false);
-      configDirty.current = false;
-    }, 1500);
-  }, [config]);
+  const handleSaveConfig = async () => {
+    setConfigSaving(true);
+    await saveConfig(config);
+    setConfigSaving(false);
+    setConfigSaved(true);
+    setTimeout(() => setConfigSaved(false), 2000);
+  };
 
   const saveSkierDebounced = useCallback((gender, event, school, idx, skier) => {
     const key = `${gender}-${event}-${school}-${idx}`;
@@ -1340,7 +1345,7 @@ export default function App() {
             <div style={{ fontSize: 14 }}>データを読み込んでいます...</div>
           </div>
         )}
-        {!loading && tab === "settings" && <SettingsTab config={config} setConfig={setConfig} onReset={handleReset} gender={gender} />}
+        {!loading && tab === "settings" && <SettingsTab config={config} setConfig={setConfig} onReset={handleReset} onSave={handleSaveConfig} saving={configSaving} saved={configSaved} gender={gender} />}
         {!loading && tab === "input"    && <InputTab config={config} data={data} setData={setData} gender={gender} saveSkierDebounced={saveSkierDebounced} />}
         {!loading && tab === "result"   && <ResultTab config={config} data={data} gender={gender} />}
         {tab === "sokuho"               && <SokuhoTab />}

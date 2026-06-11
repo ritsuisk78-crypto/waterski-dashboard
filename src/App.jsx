@@ -1255,27 +1255,34 @@ export default function App() {
     });
   }, []);
 
+  const configDirty = useRef(false);
+
   useEffect(() => {
     const interval = setInterval(async () => {
-      const [loadedData, loadedConfig] = await Promise.all([loadAllScores(buildInitialData()), loadConfig()]);
+      const loadedData = await loadAllScores(buildInitialData());
       setData(loadedData);
-      if (loadedConfig) {
-        setConfig(prev => ({
-         men:   { ...DEFAULT_CONFIG.men,   ...loadedConfig.men,   pin: { ...DEFAULT_CONFIG.men.pin,   ...loadedConfig.men?.pin   } },
-        women: { ...DEFAULT_CONFIG.women, ...loadedConfig.women, pin: { ...DEFAULT_CONFIG.women.pin, ...loadedConfig.women?.pin } },
-        }));
+      if (!configDirty.current) {
+        const loadedConfig = await loadConfig();
+        if (loadedConfig) {
+          setConfig({
+            men:   { ...DEFAULT_CONFIG.men,   ...loadedConfig.men,   pin: { ...DEFAULT_CONFIG.men.pin,   ...loadedConfig.men?.pin   } },
+            women: { ...DEFAULT_CONFIG.women, ...loadedConfig.women, pin: { ...DEFAULT_CONFIG.women.pin, ...loadedConfig.women?.pin } },
+          });
+        }
       }
     }, 10000);
     return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
+    configDirty.current = true;
     clearTimeout(configTimer.current);
     configTimer.current = setTimeout(async () => {
       setSyncing(true);
       await saveConfig(config);
       setSyncing(false);
-    }, 1000);
+      configDirty.current = false;
+    }, 1500);
   }, [config]);
 
   const saveSkierDebounced = useCallback((gender, event, school, idx, skier) => {

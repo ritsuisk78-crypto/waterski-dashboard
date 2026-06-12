@@ -1153,7 +1153,7 @@ export default function App() {
         <div style={{ maxWidth: 900, margin: "0 auto", padding: "10px 16px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <img
-              src="./KWSTロゴ.PNG"
+              src="/kwst.png"
               alt="KWST"
               style={{ height: 44, objectFit: "contain", flexShrink: 0,
                 filter: "invert(1) sepia(1) saturate(4) hue-rotate(10deg)" }}

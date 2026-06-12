@@ -643,7 +643,7 @@ function PlayerPopup({ gender, school, event, mode, config, data, onClose }) {
 // ─────────────────────────────────────────────────────────────────
 // SETTINGS TAB（既存のまま）
 // ─────────────────────────────────────────────────────────────────
-function SettingsTab({ config, setConfig, onReset, onImport, gender }) {
+function SettingsTab({ config, setConfig, onReset, onImport, onSave, saving, saved, gender }) {
   const cfg = config[gender];
   const update = (field, val) => setConfig(prev => ({ ...prev, [gender]: { ...prev[gender], [field]: val } }));
   const updatePin = (event, val) => setConfig(prev => ({ ...prev, [gender]: { ...prev[gender], pin: { ...prev[gender].pin, [event]: val } } }));
@@ -672,6 +672,21 @@ function SettingsTab({ config, setConfig, onReset, onImport, gender }) {
         </div>
         <div style={{ marginTop: 10, fontSize: 11, color: C.muted }}>現在：{cfg.out}人出・{cfg.topN}人どり　Jハンデ -{cfg.handicap}m</div>
       </div>
+      {/* 設定保存ボタン */}
+      <button
+        onClick={onSave}
+        disabled={saving}
+        style={{
+          background: saved ? C.positive + "22" : "#1a3a6a",
+          border: `1px solid ${saved ? C.positive : C.accent}`,
+          borderRadius: 10, color: saved ? C.positive : C.accent,
+          fontSize: 14, fontWeight: 700, padding: "13px",
+          cursor: "pointer", width: "100%", transition: "all 0.2s",
+        }}
+      >
+        {saved ? "✓ 保存しました" : saving ? "保存中..." : "💾 設定を保存する"}
+      </button>
+
       {/* リザルト読み込み */}
       <div style={{ background: C.surface, border: `1px solid ${C.slalom}33`, borderRadius: 12, padding: 16 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: C.slalom, marginBottom: 8 }}>📥 リザルト読み込み</div>
@@ -918,6 +933,7 @@ function DiffTables({ gender, schoolResults, config, completedEvents, data, mode
         );
       })}
     </div>
+
       {diffPopup && (
         <PlayerPopup
           gender={gender}
@@ -1118,6 +1134,18 @@ export default function App() {
   };
 
   const [showImport, setShowImport] = useState(false);
+  const [configSaving, setConfigSaving] = useState(false);
+  const [configSaved,  setConfigSaved]  = useState(false);
+  const configSaving_ref = useRef(false);
+
+  const handleSaveConfig = async () => {
+    configSaving_ref.current = true;
+    setConfigSaving(true);
+    await saveConfig(config);
+    setConfigSaving(false);
+    setConfigSaved(true);
+    setTimeout(() => { setConfigSaved(false); configSaving_ref.current = false; }, 3000);
+  };
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "'Segoe UI','Helvetica Neue',sans-serif" }}>
@@ -1125,7 +1153,7 @@ export default function App() {
         <div style={{ maxWidth: 900, margin: "0 auto", padding: "10px 16px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <img
-              src="/KWSTロゴ.PNG"
+              src="./KWSTロゴ.PNG"
               alt="KWST"
               style={{ height: 44, objectFit: "contain", flexShrink: 0,
                 filter: "invert(1) sepia(1) saturate(4) hue-rotate(10deg)" }}
@@ -1162,7 +1190,7 @@ export default function App() {
             <div style={{ fontSize: 14 }}>データを読み込んでいます...</div>
           </div>
         )}
-        {!loading && tab === "settings" && <SettingsTab config={config} setConfig={setConfig} onReset={handleReset} onImport={() => setShowImport(true)} gender={gender} />}
+        {!loading && tab === "settings" && <SettingsTab config={config} setConfig={setConfig} onReset={handleReset} onImport={() => setShowImport(true)} onSave={handleSaveConfig} saving={configSaving} saved={configSaved} gender={gender} />}
         {!loading && tab === "input"    && <InputTab config={config} data={data} setData={setData} gender={gender} saveSkierDebounced={saveSkierDebounced} />}
         {!loading && tab === "result"   && <ResultTab config={config} data={data} gender={gender} />}
         {tab === "sokuho"               && <SokuhoTab />}

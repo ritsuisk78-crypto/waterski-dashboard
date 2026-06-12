@@ -1108,14 +1108,7 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    clearTimeout(configTimer.current);
-    configTimer.current = setTimeout(async () => {
-      setSyncing(true);
-      await saveConfig(config);
-      setSyncing(false);
-    }, 1000);
-  }, [config]);
+  
 
   const saveSkierDebounced = useCallback((gender, event, school, idx, skier) => {
     const key = `${gender}-${event}-${school}-${idx}`;

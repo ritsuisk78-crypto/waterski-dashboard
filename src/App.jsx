@@ -1092,13 +1092,17 @@ export default function App() {
 
   useEffect(() => {
     const interval = setInterval(async () => {
-      const [loadedData, loadedConfig] = await Promise.all([loadAllScores(buildInitialData()), loadConfig()]);
+      const loadedData = await loadAllScores(buildInitialData());
       setData(loadedData);
-      if (loadedConfig) {
-        setConfig(prev => ({
-          men:   { ...DEFAULT_CONFIG.men,   ...loadedConfig.men,   pin: { ...prev.men.pin,   ...loadedConfig.men?.pin   } },
-          women: { ...DEFAULT_CONFIG.women, ...loadedConfig.women, pin: { ...prev.women.pin, ...loadedConfig.women?.pin } },
-        }));
+      // 保存中・保存直後はconfigを上書きしない
+      if (!configSaving_ref.current) {
+        const loadedConfig = await loadConfig();
+        if (loadedConfig) {
+          setConfig(prev => ({
+            men:   { ...DEFAULT_CONFIG.men,   ...loadedConfig.men,   pin: { ...prev.men.pin,   ...loadedConfig.men?.pin   } },
+            women: { ...DEFAULT_CONFIG.women, ...loadedConfig.women, pin: { ...prev.women.pin, ...loadedConfig.women?.pin } },
+          }));
+        }
       }
     }, 10000);
     return () => clearInterval(interval);
@@ -1144,7 +1148,7 @@ export default function App() {
     await saveConfig(config);
     setConfigSaving(false);
     setConfigSaved(true);
-    setTimeout(() => { setConfigSaved(false); configSaving_ref.current = false; }, 3000);
+    setTimeout(() => { setConfigSaved(false); configSaving_ref.current = false; }, 15000);
   };
 
   return (

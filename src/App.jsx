@@ -3,6 +3,9 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 const SUPABASE_URL = "https://scoggdtvfvkecudbxztw.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNjb2dnZHR2ZnZrZWN1ZGJ4enR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA5NDQ1NjUsImV4cCI6MjA5NjUyMDU2NX0.2NLXTp2rO-4NWU3vlEbLhzKoeqH5MMrxMcsWUPuojOM";
 
+// 🔴 ここにあなたのGemini APIキーを入力してください
+const GEMINI_API_KEY = "YOUR_GEMINI_API_KEY"; 
+
 async function sbFetch(path, options = {}) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     ...options,
@@ -20,16 +23,14 @@ async function sbFetch(path, options = {}) {
 
 // ─── 選手実績ローダー ───────────────────────────────────────────
 async function loadPlayerByKanji(kanjiInput) {
-  // 学年・スペース・記号を除去して名前のみ抽出
   const kanji = kanjiInput
-    .replace(/[（(][^）)]*[）)]/g, "")  // （4年）（3）などを除去
-    .replace(/[　\s]/g, "")              // 全角・半角スペース除去
+    .replace(/[（(][^）)]*[）)]/g, "")
+    .replace(/[　\s]/g, "")
     .trim();
   if (!kanji) return null;
   try {
     const rows = await sbFetch("players?select=*");
     if (!rows || rows.length === 0) return null;
-    // 完全一致優先、次に部分一致
     const exact = rows.find(p => p.kanji && p.kanji === kanji);
     if (exact) return exact;
     const partial = rows.find(p => p.kanji && p.kanji.includes(kanji));
@@ -58,10 +59,8 @@ function formatScore(event, scoreRaw) {
   if (event === "slalom") {
     const p = scoreRaw.split("/");
     if (p.length === 3) {
-      // ロープ長が18.25mより短い場合はショートロープ → ロープ長を表示
       const rope = parseFloat(p[2]);
       if (rope < 18.25) return `${p[0]}ブイ @${p[2]}m`;
-      // 通常は速度を表示
       return `${p[0]}ブイ @${p[1]}km`;
     }
     if (p.length === 2) return `${p[0]}ブイ @${p[1]}km`;
@@ -72,7 +71,7 @@ function formatScore(event, scoreRaw) {
   return scoreRaw;
 }
 
-// ─── 既存コードと同一定数 ────────────────────────────────────────
+// ─── スコア同期・保存 ────────────────────────────────────────
 async function loadAllScores(initialData) {
   try {
     const rows = await sbFetch("scores?select=*");
@@ -153,7 +152,7 @@ const EVENTS  = ["slalom", "trick", "jump"];
 const ECFG = {
   slalom: { label: "スラローム", short: "S", color: C.slalom, unit: "ブイ", icon: "🌊", step: "0.5" },
   trick:  { label: "トリック",   short: "T", color: C.trick,  unit: "点",   icon: "🔄", step: "100" },
-  jump:   { label: "ジャンプ",   short: "J", color: C.jump,   unit: "m",    icon: "🚀", step: "0.5" },
+  jump:   { label: "ジャンプ",   short: "J", color: C.jump,  unit: "m",    icon: "🚀", step: "0.5" },
 };
 
 const COMP_ORDER = ["cs1_2025","cs2_2025","inkare_2025","shinjin_2025","cs1_2026","cs2_2026"];
@@ -251,39 +250,13 @@ function signStr(v, suffix = "") {
 }
 function diffColor(v) { return v === null ? C.muted : v >= 0 ? C.positive : C.negative; }
 
-const LS_KEY_DATA   = "waterski_data_v2";
-const LS_KEY_CONFIG = "waterski_config_v2";
-
-function loadFromStorage() {
-  try {
-    const d = localStorage.getItem(LS_KEY_DATA);
-    const c = localStorage.getItem(LS_KEY_CONFIG);
-    return { data: d ? JSON.parse(d) : null, config: c ? JSON.parse(c) : null };
-  } catch { return { data: null, config: null }; }
-}
-function saveToStorage(data, config) {
-  try {
-    localStorage.setItem(LS_KEY_DATA, JSON.stringify(data));
-    localStorage.setItem(LS_KEY_CONFIG, JSON.stringify(config));
-  } catch {}
-}
-function clearStorage() {
-  try {
-    localStorage.removeItem(LS_KEY_DATA);
-    localStorage.removeItem(LS_KEY_CONFIG);
-  } catch {}
-}
-
-// ─────────────────────────────────────────────────────────────────
-// PLAYER HISTORY POPUP（新規追加）
-// ─────────────────────────────────────────────────────────────────
 function PlayerHistoryPopup({ kanjiInput, onClose }) {
   const [player,  setPlayer]  = useState(null);
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState(null);
 
-  const displayName = kanjiInput.replace(/[（(]\d+[）)]/g, "").trim();
+  const displayName = kanjiInput.replace(/[（(][^）)]*[）)]/g, "").trim();
 
   useEffect(() => {
     if (!kanjiInput) return;
@@ -300,9 +273,8 @@ function PlayerHistoryPopup({ kanjiInput, onClose }) {
       setResults(r);
       setLoading(false);
     });
-  }, [kanjiInput]);
+  }, [kanjiInput, displayName]);
 
-  // results を competition_id → event → score_raw に整理
   const matrix = {};
   for (const r of results) {
     if (!matrix[r.competition_id]) matrix[r.competition_id] = {};
@@ -311,7 +283,6 @@ function PlayerHistoryPopup({ kanjiInput, onClose }) {
 
   const compIds = COMP_ORDER.filter(cid => matrix[cid]);
   const latestComp = compIds[compIds.length - 1];
-
   const playerEvents = player ? safeJsonParse(player.events) : [];
 
   return (
@@ -334,10 +305,7 @@ function PlayerHistoryPopup({ kanjiInput, onClose }) {
           maxHeight: "80vh", overflowY: "auto",
         }}
       >
-        {/* ハンドル */}
         <div style={{ width: 36, height: 4, background: C.border, borderRadius: 2, margin: "0 auto 16px" }} />
-
-        {/* ヘッダー */}
         <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 20 }}>
           <div style={{
             width: 42, height: 42, borderRadius: "50%", flexShrink: 0,
@@ -361,7 +329,6 @@ function PlayerHistoryPopup({ kanjiInput, onClose }) {
           <button onClick={onClose} style={{ background: "none", border: "none", color: C.muted, fontSize: 22, cursor: "pointer", lineHeight: 1 }}>✕</button>
         </div>
 
-        {/* 担当種目バッジ */}
         {playerEvents.length > 0 && (
           <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
             {playerEvents.map(e => (
@@ -375,7 +342,6 @@ function PlayerHistoryPopup({ kanjiInput, onClose }) {
           </div>
         )}
 
-        {/* ローディング */}
         {loading && (
           <div style={{ textAlign: "center", padding: "40px 0", color: C.muted }}>
             <div style={{ fontSize: 24, marginBottom: 8 }}>🌊</div>
@@ -383,21 +349,18 @@ function PlayerHistoryPopup({ kanjiInput, onClose }) {
           </div>
         )}
 
-        {/* エラー */}
         {!loading && error && (
           <div style={{ background: C.negative + "22", border: `1px solid ${C.negative}44`, borderRadius: 10, padding: 14, color: C.negative, fontSize: 13 }}>
             {error}
           </div>
         )}
 
-        {/* 記録なし */}
         {!loading && !error && compIds.length === 0 && (
           <div style={{ textAlign: "center", padding: "32px 0", color: C.muted, fontSize: 13 }}>
             過去の大会記録がありません
           </div>
         )}
 
-        {/* 大会別カード */}
         {!loading && !error && compIds.map(cid => {
           const isLatest = cid === latestComp;
           return (
@@ -441,7 +404,6 @@ function PlayerHistoryPopup({ kanjiInput, onClose }) {
           );
         })}
 
-        {/* リザルト英語表記 */}
         {player?.en_names && !loading && (
           <div style={{ marginTop: 10, fontSize: 10, color: C.muted + "99", textAlign: "center" }}>
             {safeJsonParse(player.en_names).join(" / ")}
@@ -452,9 +414,7 @@ function PlayerHistoryPopup({ kanjiInput, onClose }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────
-// SHARED UI
-// ─────────────────────────────────────────────────────────────────
+// ─── SHARED UI ─────────────────────────────────────────────────
 function AppTab({ label, active, onClick }) {
   return (
     <button onClick={onClick} style={{
@@ -464,23 +424,6 @@ function AppTab({ label, active, onClick }) {
       fontSize: 13, fontWeight: active ? 700 : 400,
       padding: "10px 0", cursor: "pointer", transition: "color 0.2s",
     }}>{label}</button>
-  );
-}
-
-function GenderToggle({ gender, onChange }) {
-  return (
-    <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-      {[{ key: "men", label: "👨 男子", color: C.men }, { key: "women", label: "👩 女子", color: C.women }].map(g => (
-        <button key={g.key} onClick={() => onChange(g.key)} style={{
-          flex: 1,
-          background: gender === g.key ? g.color + "22" : C.surface,
-          border: `1px solid ${gender === g.key ? g.color : C.border}`,
-          borderRadius: 10, color: gender === g.key ? g.color : C.muted,
-          fontSize: 14, fontWeight: gender === g.key ? 700 : 400,
-          padding: "10px", cursor: "pointer", transition: "all 0.2s",
-        }}>{g.label}</button>
-      ))}
-    </div>
   );
 }
 
@@ -522,9 +465,6 @@ function NumField({ value, onChange, placeholder, step, style = {} }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────
-// PLAYER POPUP（既存 + 選手名クリックで実績表示を追加）
-// ─────────────────────────────────────────────────────────────────
 function PlayerPopup({ gender, school, event, mode, config, data, onClose }) {
   const cfg  = config[gender];
   const ecfg = ECFG[event];
@@ -584,10 +524,9 @@ function PlayerPopup({ gender, school, event, mode, config, data, onClose }) {
                   border: `1px solid ${isAdopted ? C.accent : C.border}`,
                   display: "flex", alignItems: "center", justifyContent: "center",
                   fontSize: 11, fontWeight: 700, color: isAdopted ? C.bg : C.muted,
-                }}>{i + 1}</div>
+                }} >{i + 1}</div>
 
                 <div style={{ flex: 1 }}>
-                  {/* 選手名クリックで実績ポップアップ */}
                   <div
                     onClick={() => sk.name && setHistoryTarget(sk.name)}
                     style={{
@@ -632,7 +571,6 @@ function PlayerPopup({ gender, school, event, mode, config, data, onClose }) {
         </div>
       </div>
 
-      {/* 選手名タップで実績ポップアップ */}
       {historyTarget && (
         <PlayerHistoryPopup kanjiInput={historyTarget} onClose={() => setHistoryTarget(null)} />
       )}
@@ -640,9 +578,7 @@ function PlayerPopup({ gender, school, event, mode, config, data, onClose }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────
-// SETTINGS TAB（既存のまま）
-// ─────────────────────────────────────────────────────────────────
+// ─── SETTINGS TAB ───────────────────────────────────────────────
 function SettingsTab({ config, setConfig, onReset, onImport, onSave, saving, saved, gender }) {
   const cfg = config[gender];
   const update = (field, val) => setConfig(prev => ({ ...prev, [gender]: { ...prev[gender], [field]: val } }));
@@ -672,7 +608,6 @@ function SettingsTab({ config, setConfig, onReset, onImport, onSave, saving, sav
         </div>
         <div style={{ marginTop: 10, fontSize: 11, color: C.muted }}>現在：{cfg.out}人出・{cfg.topN}人どり　Jハンデ -{cfg.handicap}m</div>
       </div>
-      {/* 設定保存ボタン */}
       <button
         onClick={onSave}
         disabled={saving}
@@ -687,7 +622,6 @@ function SettingsTab({ config, setConfig, onReset, onImport, onSave, saving, sav
         {saved ? "✓ 保存しました" : saving ? "保存中..." : "💾 設定を保存する"}
       </button>
 
-      {/* リザルト読み込み */}
       <div style={{ background: C.surface, border: `1px solid ${C.slalom}33`, borderRadius: 12, padding: 16 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: C.slalom, marginBottom: 8 }}>📥 リザルト読み込み</div>
         <div style={{ fontSize: 12, color: C.muted, marginBottom: 12, lineHeight: 1.6 }}>
@@ -709,9 +643,7 @@ function SettingsTab({ config, setConfig, onReset, onImport, onSave, saving, sav
   );
 }
 
-// ─────────────────────────────────────────────────────────────────
-// INPUT TAB（実績ボタン追加）
-// ─────────────────────────────────────────────────────────────────
+// ─── INPUT TAB ─────────────────────────────────────────────────
 function InputTab({ config, data, setData, gender, saveSkierDebounced }) {
   const [event,  setEvent]  = useState("slalom");
   const [school, setSchool] = useState("慶應");
@@ -734,7 +666,6 @@ function InputTab({ config, data, setData, gender, saveSkierDebounced }) {
 
   return (
     <div>
-      {/* 種目選択 */}
       <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
         {EVENTS.map(e => {
           const c = ECFG[e];
@@ -755,7 +686,6 @@ function InputTab({ config, data, setData, gender, saveSkierDebounced }) {
         })}
       </div>
 
-      {/* 学校選択 */}
       <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
         {SCHOOLS.map(s => {
           const skrs = data[gender]?.[event]?.[s] || [];
@@ -778,7 +708,6 @@ function InputTab({ config, data, setData, gender, saveSkierDebounced }) {
         })}
       </div>
 
-      {/* 進捗バー */}
       <div style={{ background: C.surface, border: `1px solid ${ecfg.color}33`, borderRadius: 10, padding: "10px 14px", marginBottom: 14 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
           <span style={{ fontSize: 12, color: ecfg.color, fontWeight: 700 }}>{ecfg.label}　{school}</span>
@@ -790,7 +719,6 @@ function InputTab({ config, data, setData, gender, saveSkierDebounced }) {
         {event === "jump" && <div style={{ fontSize: 10, color: C.jump, marginTop: 6 }}>※ Jハンデ -{cfg.handicap}m を引いて換算点を計算します</div>}
       </div>
 
-      {/* 選手カード */}
       {skiers.map((sk, i) => {
         const hasActual = sk.actual !== "";
         const score = hasActual ? sk.actual : sk.planned !== "" ? sk.planned : null;
@@ -807,7 +735,6 @@ function InputTab({ config, data, setData, gender, saveSkierDebounced }) {
                 placeholder={`選手${i + 1}（例: 内藤駿（3））`}
                 style={{ background: "transparent", border: "none", borderBottom: `1px solid ${C.border}`, color: C.text, fontSize: 14, fontWeight: 700, padding: "2px 0", outline: "none", flex: 1 }}
               />
-              {/* 実績ボタン：名前があるときのみ表示 */}
               {sk.name && (
                 <button
                   onClick={() => setHistoryTarget(sk.name)}
@@ -840,7 +767,6 @@ function InputTab({ config, data, setData, gender, saveSkierDebounced }) {
         );
       })}
 
-      {/* 実績ポップアップ */}
       {historyTarget && (
         <PlayerHistoryPopup kanjiInput={historyTarget} onClose={() => setHistoryTarget(null)} />
       )}
@@ -848,9 +774,7 @@ function InputTab({ config, data, setData, gender, saveSkierDebounced }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────
-// RESULT TAB（既存のまま）
-// ─────────────────────────────────────────────────────────────────
+// ─── RESULT TAB ─────────────────────────────────────────────────
 function DiffTables({ gender, schoolResults, config, completedEvents, data, mode }) {
   const cfg  = config[gender];
   const keio  = schoolResults.find(r => r.school === "慶應");
@@ -1065,16 +989,18 @@ function ResultTab({ config, data, gender }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────
-// APP ROOT
-// ─────────────────────────────────────────────────────────────────
+// ─── APP ROOT (自動保存バグ修正済み) ──────────────────────────────
 export default function App() {
   const [tab, setTab] = useState("input");
   const [gender, setGender] = useState("men");
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [configSaving, setConfigSaving] = useState(false);
+  const [configSaved,  setConfigSaved]  = useState(false);
+
   const saveTimers = useRef({});
-  const configTimer = useRef(null);
+  const configSaving_ref = useRef(false);
 
   const [config, setConfig] = useState({ men: { ...DEFAULT_CONFIG.men }, women: { ...DEFAULT_CONFIG.women } });
   const [data, setData] = useState(buildInitialData());
@@ -1094,7 +1020,6 @@ export default function App() {
     const interval = setInterval(async () => {
       const loadedData = await loadAllScores(buildInitialData());
       setData(loadedData);
-      // 保存中・保存直後はconfigを上書きしない
       if (!configSaving_ref.current) {
         const loadedConfig = await loadConfig();
         if (loadedConfig) {
@@ -1108,7 +1033,7 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  
+  // 💡 【重要】他デバイスとの競合による初期化バグを防ぐため、自動上書き保存の useEffect はここから綺麗に削除されました。
 
   const saveSkierDebounced = useCallback((gender, event, school, idx, skier) => {
     const key = `${gender}-${event}-${school}-${idx}`;
@@ -1122,18 +1047,12 @@ export default function App() {
 
   const handleReset = async () => {
     if (window.confirm("全データをリセットしますか？この操作は元に戻せません。")) {
-      clearStorage();
       const resetConfig = { men: { ...DEFAULT_CONFIG.men }, women: { ...DEFAULT_CONFIG.women } };
       setConfig(resetConfig);
       setData(buildInitialData());
       await saveConfig(resetConfig);
     }
   };
-
-  const [showImport, setShowImport] = useState(false);
-  const [configSaving, setConfigSaving] = useState(false);
-  const [configSaved,  setConfigSaved]  = useState(false);
-  const configSaving_ref = useRef(false);
 
   const handleSaveConfig = async () => {
     configSaving_ref.current = true;
@@ -1150,11 +1069,11 @@ export default function App() {
         <div style={{ maxWidth: 900, margin: "0 auto", padding: "10px 16px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <img
-              src="data:image/png;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADb/2wBDAAUDBAQEAwUEBAQFBQUGBwwIBwcHBw8LCwkMEQ8SEhEPERETFhwXExQaFRERGCEYGh0dHx8fExciJCIeJBweHx7/2wBDAQUFBQcGBw4ICA4eFBEUHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh7/wAARCAEYAYMDASIAAhEBAxEB/8QAHQABAAIDAQEBAQAAAAAAAAAAAAcIBQYJBAMBAv/EAFgQAAEDAwIDBAMHDQ0GBAcAAAEAAgMEBQYHERIhMQgTQVEiYXEUGEJSgZTTFRcjMlRVYnKCkZKhsxYkMzY3OFd0dYSVtNIJQ1N2orE0VrLBRWODk8LD0f/EABYBAQEBAAAAAAAAAAAAAAAAAAABAv/EABkRAQEBAQEBAAAAAAAAAAAAAAABESExQf/aAAwDAQACEQMRAD8AuWiIgIiICIiAiIgIiICIiAiL+JpoYeDvpWR8bwxvEdt3HoPaUH9oiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgLzXSgpbnbp7fWxCWnqGFkjdyNwfIjmCOoI5g8wvSiCFbXqTW6dZw3T/UysL6Ko9KxZFKOFtRFvsI6g9BI3cNL+QPIkDfczS1zXNDmkOaRuCDyIWk616d2zUvCKmxVvBFVs3loKot3NPMByP4p6EeIPnsqvaNa15HpHkEun2ocNTUWmhm9zHfd81v25As+PFtsQ3y2LfIlXYReOyXW23u1U91tFbBW0NSzjhnhfxMePUV7EQREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBV87YGkH7sLC7Msfpi6/WyE+6IY27urKccyNhzL2cyPEjcc/R2sGiDnHobrDkel92/erjXWSd/FV22R2zXdAXsPwH7Dr0PQg8tr7ab51jeoGOx3zG65tRCdmzQu9GWnf4skb8E/qPUEjmqjdsTSE4pfnZtYKYix3Ob99xRt9GjqD7OjHncjwDtxy3aFDmnWcZHgGQx3vGq40842bLG4cUU7N9+CRviPzEeBBRrNdQkUCY92qdOanFILjenV1vuv2s1uip3TO4gBuWP2DS078tyD6ljx2vdPu82OP5R3e/23cwb7ezvf/dExYtFEWN9pDSW9TMhOQSWyV/RtwpnxAe14BYPlcpTtVxt92oY6+111LXUko3jnp5WyRvHmHNJBRHqRF86uogpKaWqqpo4IIml8kkjg1rGjqSTyAQKqeClppampmjhgiYXySSODWsaBuSSeQAHivyiqYayjhq6dxdDPG2SMlpBLXDcHY8xyPiqpai6nVOtWpNr0rwqWVuMVFU0XSsYHNdVwsPFIRy3bGGtO2+3E7bfYbK14EVPAB6McUbfYGtA/UNkH9ooVxjU12pWtzLBicz34tjsUlVcK1n2tdPsY42NP/DDnFw+MWb9AN5qQEXwjrKaSumoY5Q6ogYySVg+AH8XDv7eF3L1exfdAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERBjcotlpvOOXC132GKa11NO9lU2U7N7vbmd/Dbrv4bbrlzkMVrgv1fDZKqertjKiRtHPNHwPkiDjwOc3wJG3/APB0V/e15fZ7FoTezTP4JbgY6AH8GR3p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8+DWjmfzDmQF0wwfHKDEcRtmNWxu1Lb6dsLDtsXkc3PPrc4lx9ZKFZlERGXLbUP+P+Rf2rU/tXLBLO6h/wAf8i/tWp/auWCRtNfYo/l6oP6lU/s1ftUE7FH8vVB/Uqn9mr9ozREREEREBERAREQEREBERAREQUU7U+C5vedecjuVow7IrjQze5e6qaW2TSxP2pYWnZzWkHYgg7eIKjH62OpP9HuW/wCDVH+hdOURdc7dJNO9QKLVXEa2twXJ6alp75RSzTTWmdjI2NnYXOc4t2AABJJ6LokiIW6KP+0DgceoemNyskcbTcYm+6rc4/BnYDwjfwDgSw+pykBERzG+tjqT/R7lv+DVH+hPrY6k/wBHuW/4NUf6F05RF1zG+tjqT/R7lv8Ag1R/oU2aE5xrXp7HDZbvpzmN8x1uzWQOtNQJqUb/AO6cWc2/gHl02Lee9zUQ1isWvtPkNrbX09DdqEHk6C5UEtJKw+RbI0b+0bj1qk/ag0xzGXWu+XCwYlfLnb68x1TJqK3SzR8TmN4wXMaRvxhx29YV7UQlcxvrY6k/0e5b/g1R/oX1otKtSqqshpm4Fk8RmkbGHy2mdjG7nbdzizYAeJPRdNEQ14MdtdNY7Bb7NRtDaegpY6aIAbeixoaP1Be9EREadp3E6jMdGL3baGmkqa+na2spI44zI98kbty1rRzLnN42gDxcqI/Wx1J/o9y3/Bqj/QunKIsuOY31sdSf6Pct/wAGqP8AQrHdhvAcgsOQZHfskx652iVtLFSUvu+kfA6QPcXycIeBuB3ce59atWiGiIiI1bVDAse1ExeSw5DTudGTxwTxkCWnk22D2HwPqPIjkVTfUHsvaiY/USSWCKDJaDf0X0zhHMB+FG49fxS5XxRF1y3ueGZha3llyxW+UZB2Pf0ErPPzb6isCusyIuuV1oxvIrwGm0WC63AP34TS0ckvFz25cIPkfzKVtP8Asz6lZLUsddaFmN0B2Lp64gybfgxNPFv6ncPXqr9oia0PR3SrF9MLO+lskLp62oA9118+xlnI8PJrR4NHy7nmt8REQREQc386041Dqc3v1RT4FlM0MtyqHxyR2idzXtMriCCGbEEeKw31sdSf6Pct/wAGqP8AQunKIuqSdkPCczsetdFcL1iN/tlG2kqGuqKy2zQxglmwBc5oG5V20REoiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIg//9k="
+              src="data:image/png;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADb/2wBDAAUDBAQEAwUEBAQFBQUGBwwIBwcHBw8LCwkMEQ8SEhEPERETFhwXExQaFRERGCEYGh0dHx8fExciJCIeJBweHx7/2wBDAQUFBQcGBw4ICA4eFBEUHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh7/wAARCAEYAYMDASIAAhEBAxEB/8QAHQABAAIDAQEBAQAAAAAAAAAAAAcIBQYJBAMBAv/EAFgQAAEDAwIDBAMHDQ0GBAcAAAEAAgMEBQYHERIhMQgTQVEiYXEUGEJSgZTTFRcjMlRVYnKCkZKhsxYkMzY3OFd0dYSVtNIJQ1N2orE0VrLBRWODk8LD0f/EABYBAQEBAAAAAAAAAAAAAAAAAAABAv/EABkRAQEBAQEBAAAAAAAAAAAAAAABESExQf/aAAwDAQACEQMRAD8AuWiIgIiICIiAiIgIiICIiAiL+JpoYeDvpWR8bwxvEdt3HoPaUH9oiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgLzXSgpbnbp7fWxCWnqGFkjdyNwfIjmCOoI5g8wvSiCFbXqTW6dZw3T/UysL6Ko9KxZFKOFtRFvsI6g9BI3cNL+QPIkDfczS1zXNDmkOaRuCDyIWk616d2zUvCKmxVvBFVs3loKot3NPMByG4p6EeIPnsqvaNa15HpHkEun2ocNTUWmhm9zHfd81v25As+PFtsQ3y2LfIlXYReOyXW23u1U91tFbBW0NSzjhnhfxMePUV7reactEBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBUR7YGkH7sLC7Msfpi6/WyE+6IY27urKccyNhzL2cyPEjcc/R2sGiDnHobrDkel92/erjXWSd/FV22R2zXdAXsPwH7Dr0PQg8tr7ab51jeoGOx3zG65tRCdmzQu9GWnf4skb8E/qPUEjmqjdsTSE4pfnZtYKYix3Ob99xRt9GjqD7OjHncjwDtxy3aFDmnWcZHgGQx3vGq40842bLG4cUU7N9+CRviPzEeBBRrNdQkUCY92qdOanFILjenV1vuv2s1uip3TO4gBuWP2DS078tyD6ljx2vdPu82OP5R3e/23cwb7ezvf/dExYtFEWN9pDSW9TMhOQSWyV/RtwpnxAe14BYPlcpTtVxt92oY6+111LXUko3jnp5WyRvHmHNJBRHqRF86uogpKaWqqpo4IIml...
               alt="KWST"
               style={{ height: 44, objectFit: "contain", flexShrink: 0,
                 filter: "invert(1) sepia(1) saturate(4) hue-rotate(10deg)" }}
-              onError={e => { e.target.style.display = "none"; }}
+              onError={e => { e.currentTarget.style.display = "none"; }}
             />
             <div>
               <div style={{ fontSize: 10, color: C.muted, lineHeight: 1, marginBottom: 2 }}>慶應義塾大学水上スキー部</div>
@@ -1204,9 +1123,7 @@ export default function App() {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────
-// IMPORT MODAL（リザルト読み込み）
-// ─────────────────────────────────────────────────────────────────
+// ─── IMPORT MODAL (Gemini 2.5移行 ＋ 現役絞り込みプロンプト搭載版) ───
 function ImportModal({ onClose }) {
   const [step, setStep] = useState("upload");
   const [matchedData, setMatchedData] = useState([]);
@@ -1232,37 +1149,73 @@ function ImportModal({ onClose }) {
     setStep("loading");
     setError(null);
     try {
-      const isImage = file.type.startsWith("image/");
-      const isPdf   = file.type === "application/pdf";
-      const base64  = await readFileAsBase64(file);
-      const prompt = `このファイルは水上スキー大会のリザルト（結果表）です。5校（慶應、法政、立教、福大、学習院）の選手データのみを抽出してください。以下のJSON形式のみで返してください：{"competition_name":"大会名","held_date":"YYYY-MM-DD","results":[{"en_name":"英語名","slalom":"スコアまたはnull","trick":数値またはnull,"jump":数値またはnull}]}`;
+      // 1. 先にSupabaseから登録されている現役部員の名簿をすべて取得
+      const players = await sbFetch("players?select=*");
+      
+      // 2. 名簿から英語名だけを抜き出して、AI用のホワイトリスト（カンペ）を作成
+      const allowedNames = players ? players.flatMap(p => {
+        const ens = Array.isArray(p.en_names) ? p.en_names : (typeof p.en_names === 'string' ? JSON.parse(p.en_names || "[]") : []);
+        return ens.map(n => n.toLowerCase());
+      }) : [];
 
-      let messages;
-      if (isImage) {
-        messages = [{ role: "user", content: [{ type: "image", source: { type: "base64", media_type: file.type, data: base64 } }, { type: "text", text: prompt }] }];
-      } else if (isPdf) {
-        messages = [{ role: "user", content: [{ type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } }, { type: "text", text: prompt }] }];
-      } else {
-        messages = [{ role: "user", content: prompt }];
-      }
+      const base64 = await readFileAsBase64(file);
+      
+      // 3. 他校やプロなどの余計なデータを弾く強力な指示文を組み立て
+      const prompt = `このファイルは水上スキー大会のリザルト（結果表）です。
+【最重要指示：ターゲットの絞り込み】
+リザルト内には多数の選手が掲載されていますが、以下に記述する「対象選手リスト」のいずれかに名前が一致する選手（大文字小文字・姓名の順のブレは考慮してください）のみをピンポイントで抽出してください。
 
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
+リストに名前がない選手（他校の選手、社会人、プロなど）のデータは、1件たりとも抽出せず、完全に無視（除外）してください。
+
+対象選手リスト：
+${allowedNames.join(", ")}
+
+必ず指定されたJSONフォーマットのみで返答してください。解説文などは一切含めないでください。
+
+JSONフォーマット:
+{
+  "competition_name": "大会名",
+  "held_date": "YYYY-MM-DD",
+  "results": [
+    {
+      "en_name": "英語名（例：NAITO Shun）",
+      "slalom": "スコアまたはnull",
+      "trick": 数値またはnull,
+      "jump": 数値またはnull
+    }
+  ]
+}`;
+
+      const contents = [
+        {
+          parts: [
+            { inlineData: { mimeType: file.type, data: base64 } },
+            { text: prompt }
+          ]
+        }
+      ];
+
+      // Gemini 2.5 API の呼び出し（構造化JSON出力モード）
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 4000, messages }),
+        body: JSON.stringify({
+          contents,
+          generationConfig: { responseMimeType: "application/json" }
+        }),
       });
+
+      if (!res.ok) { const e = await res.text(); throw new Error(e); }
       const apiData = await res.json();
-      const text = apiData.content?.map(c => c.text || "").join("") || "";
-      const clean = text.replace(/```json|```/g, "").trim();
-      const parsed = JSON.parse(clean);
+      const text = apiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      const parsed = JSON.parse(text.trim());
 
       setCompName(parsed.competition_name || "");
       setHeldDate(parsed.held_date || "");
       const autoId = (parsed.competition_name || "").toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "") || "comp_" + Date.now();
       setCompId(autoId);
 
-      // 選手マッチング
-      const players = await sbFetch("players?select=*");
+      // 4. ダウンロード済みの名簿とスコアを突合するマッチング処理
       const matched = (parsed.results || []).map(r => {
         const player = players?.find(p => {
           const ens = Array.isArray(p.en_names) ? p.en_names : (typeof p.en_names === 'string' ? JSON.parse(p.en_names || "[]") : []);
@@ -1274,7 +1227,7 @@ function ImportModal({ onClose }) {
       setStep("confirm");
     } catch(e) {
       console.error(e);
-      setError("読み取りに失敗しました。ファイルを確認してください。");
+      setError("AIによる読み取りに失敗しました。ファイルやAPIキーの設定を確認してください。");
       setStep("upload");
     }
   }
@@ -1342,7 +1295,7 @@ function ImportModal({ onClose }) {
             <div style={{ fontSize: 40, marginBottom: 16, display: "inline-block", animation: "spin 1.5s linear infinite" }}>🌊</div>
             <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
             <div style={{ fontSize: 14, color: C.text, marginBottom: 8 }}>AIがリザルトを解析中...</div>
-            <div style={{ fontSize: 12, color: C.muted }}>選手名・スコアを認識しています</div>
+            <div style={{ fontSize: 12, color: C.muted }}>現役部員のスコアを狙い撃ちで認識しています</div>
           </div>
         )}
 
@@ -1409,9 +1362,7 @@ function ImportModal({ onClose }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────
-// 速報タブ関連
-// ─────────────────────────────────────────────────────────────────
+// ─── 📡 速報タブ関連 ──────────────────────────────────────────────
 function ResultButtons({ compCode }) {
   const [open, setOpen] = useState(null);
   const events = [
@@ -1571,7 +1522,6 @@ function SokuhoTab() {
         </div>
       </a>
       <ResultButtons compCode={compCode} />
-      <style>{`@keyframes liveblink{0%,100%{opacity:1}50%{opacity:0.15}}`}</style>
     </div>
   );
 }

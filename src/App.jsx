@@ -105,7 +105,7 @@ async function saveSkier(gender, event, school, idx, skier) {
 
 async function loadConfig() {
   try {
-    const rows = await sbFetch("app_config?select=*");
+    const rows = await sbFetch("app_config?key=eq.config&select=*");
     if (rows && rows.length > 0) return JSON.parse(rows[0].value);
   } catch {}
   return null;
@@ -1077,7 +1077,6 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const saveTimers = useRef({});
-  const configTimer = useRef(null);
 
   const [config, setConfig] = useState({ men: { ...DEFAULT_CONFIG.men }, women: { ...DEFAULT_CONFIG.women } });
   const [data, setData] = useState(buildInitialData());
@@ -1113,15 +1112,6 @@ export default function App() {
     }, 10000);
     return () => clearInterval(interval);
   }, []);
-
-  useEffect(() => {
-    clearTimeout(configTimer.current);
-    configTimer.current = setTimeout(async () => {
-      setSyncing(true);
-      await saveConfig(config);
-      setSyncing(false);
-    }, 1000);
-  }, [config]);
 
   const saveSkierDebounced = useCallback((gender, event, school, idx, skier) => {
     const key = `${gender}-${event}-${school}-${idx}`;

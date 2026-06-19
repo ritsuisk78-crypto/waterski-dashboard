@@ -1072,7 +1072,7 @@ function ResultTab({ config, data, gender }) {
 // APP ROOT
 // ─────────────────────────────────────────────────────────────────
 export default function App() {
-  const [tab, setTab] = useState("input");
+  const [tab, setTab] = useState("result");
   const [gender, setGender] = useState("men");
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);

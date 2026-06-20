@@ -884,11 +884,14 @@ function DiffTables({ gender, schoolResults, config, completedEvents, data, mode
                 <tr key={r.school} style={{ borderBottom: `1px solid ${C.border}` }}>
                   <td style={{ padding: "8px 10px", fontWeight: 700, color: C.text }}>{r.school}</td>
                   <td style={{ padding: "8px 8px", textAlign: "center", fontFamily: "monospace", fontWeight: 700, color: diffColor(d) }}>{signStr(d, "pt")}</td>
-                  {EVENTS.map(e => (
-                    <td key={e} style={{ padding: "6px 4px", textAlign: "center", fontFamily: "monospace", fontSize: 11, color: d === null ? C.muted : ECFG[e].color, whiteSpace: "nowrap" }}>
-                      {d === null ? "—" : `${d >= 0 ? "+" : "-"}${ptToUnit(Math.abs(d), cfg.pin[e])}${ECFG[e].unit}`}
-                    </td>
-                  ))}
+                  {EVENTS.map(e => {
+                    const effPin = e === "jump" ? Math.max(0, parseFloat(cfg.pin[e]) - parseFloat(cfg.handicap)) : parseFloat(cfg.pin[e]);
+                    return (
+                      <td key={e} style={{ padding: "6px 4px", textAlign: "center", fontFamily: "monospace", fontSize: 11, color: d === null ? C.muted : ECFG[e].color, whiteSpace: "nowrap" }}>
+                        {d === null ? "—" : `${d >= 0 ? "+" : "-"}${ptToUnit(Math.abs(d), effPin)}${ECFG[e].unit}`}
+                      </td>
+                    );
+                  })}
                 </tr>
               );
             })}

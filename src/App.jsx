@@ -187,7 +187,7 @@ function applyHandicap(score, event, handicap) {
   if (event !== "jump") return score;
   const v = parseFloat(score);
   if (isNaN(v)) return null;
-  return Math.max(0, v - handicap);
+  return Math.round(Math.max(0, v - handicap) * 100) / 100;
 }
 
 function calcConv(rawScore, event, pin, handicap) {
@@ -1073,6 +1073,8 @@ function ResultTab({ config, data, gender }) {
 // ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [tab, setTab] = useState("result");
+  const tabRef = useRef("result");
+  useEffect(() => { tabRef.current = tab; }, [tab]);
   const [gender, setGender] = useState("men");
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -1099,8 +1101,8 @@ export default function App() {
     const interval = setInterval(async () => {
       const loadedData = await loadAllScores(buildInitialData());
       setData(loadedData);
-      // 保存中・保存直後はconfigを上書きしない
-      if (!configSaving_ref.current) {
+      // 保存中・保存直後・設定タブを開いている間はconfigを上書きしない
+      if (!configSaving_ref.current && tabRef.current !== "settings") {
         const loadedConfig = await loadConfig();
         if (loadedConfig) {
           setConfig(prev => ({

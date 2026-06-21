@@ -7,10 +7,13 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      // 新しいバージョンが見つかったら即座に有効化し、
+      // 開いているすべてのタブ/PWAを新しいservice workerの管理下に置く
       workbox: {
-        // App.jsx・依存JSをすべてキャッシュ
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
-        // Supabase APIはネットワーク優先（オンライン時は常に最新を取得）
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/scoggdtvfvkecudbxztw\.supabase\.co\/.*/i,

@@ -1075,6 +1075,30 @@ function ResultTab({ config, data, gender }) {
 // APP ROOT
 // ─────────────────────────────────────────────────────────────────
 export default function App() {
+  // PWAの新バージョンを検知したら自動でリロードする
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    navigator.serviceWorker.getRegistration().then(reg => {
+      if (!reg) return;
+      reg.addEventListener("updatefound", () => {
+        const newWorker = reg.installing;
+        if (!newWorker) return;
+        newWorker.addEventListener("statechange", () => {
+          if (newWorker.state === "activated") {
+            window.location.reload();
+          }
+        });
+      });
+      // 起動時にも更新チェックを走らせる
+      reg.update();
+    });
+    // 定期的に更新チェック（5分ごと）
+    const checkInterval = setInterval(() => {
+      navigator.serviceWorker.getRegistration().then(reg => reg && reg.update());
+    }, 5 * 60 * 1000);
+    return () => clearInterval(checkInterval);
+  }, []);
+
   const [tab, setTab] = useState("result");
   const tabRef = useRef("result");
   useEffect(() => { tabRef.current = tab; }, [tab]);

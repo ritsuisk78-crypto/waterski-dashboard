@@ -203,6 +203,7 @@ function getEffectiveScore(sk, mode) {
   const a = sk.actual !== "" ? sk.actual : null;
   const p = sk.planned !== "" ? sk.planned : null;
   if (mode === "A") return a;
+  if (mode === "P") return p;
   return a !== null ? a : p;
 }
 
@@ -647,7 +648,7 @@ function PlayerPopup({ gender, school, event, mode, config, data, onClose }) {
 // ─────────────────────────────────────────────────────────────────
 // SETTINGS TAB（既存のまま）
 // ─────────────────────────────────────────────────────────────────
-function SettingsTab({ config, setConfig, onReset, onImport, onSave, saving, saved, gender }) {
+function SettingsTab({ config, setConfig, onReset, onSave, saving, saved, gender }) {
   const cfg = config[gender];
   const update = (field, val) => setConfig(prev => ({ ...prev, [gender]: { ...prev[gender], [field]: val } }));
   const updatePin = (event, val) => setConfig(prev => ({ ...prev, [gender]: { ...prev[gender], pin: { ...prev[gender].pin, [event]: val } } }));
@@ -690,17 +691,6 @@ function SettingsTab({ config, setConfig, onReset, onImport, onSave, saving, sav
       >
         {saved ? "✓ 保存しました" : saving ? "保存中..." : "💾 設定を保存する"}
       </button>
-
-      {/* リザルト読み込み */}
-      <div style={{ background: C.surface, border: `1px solid ${C.slalom}33`, borderRadius: 12, padding: 16 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: C.slalom, marginBottom: 8 }}>📥 リザルト読み込み</div>
-        <div style={{ fontSize: 12, color: C.muted, marginBottom: 12, lineHeight: 1.6 }}>
-          大会リザルト（PDF・Excel・写真）をAIで自動読み取りしてデータベースに登録します。
-        </div>
-        <button onClick={onImport} style={{ background: C.slalom + "22", border: `1px solid ${C.slalom}66`, borderRadius: 8, color: C.slalom, fontSize: 13, fontWeight: 700, padding: "11px 20px", cursor: "pointer", width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-          📥 リザルトを読み込む
-        </button>
-      </div>
 
       <div style={{ background: C.surface, border: `1px solid ${C.negative}33`, borderRadius: 12, padding: 16 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: C.negative, marginBottom: 8 }}>⚠️ データリセット</div>
@@ -860,6 +850,10 @@ function DiffTables({ gender, schoolResults, config, completedEvents, data, mode
   const keio  = schoolResults.find(r => r.school === "慶應");
   const others = schoolResults.filter(r => r.school !== "慶應");
   const [diffPopup, setDiffPopup] = useState(null);
+
+  // 慶應「実際」vs「想定」の比較（種目別・総合）
+  const keioPlannedSchoolResult = calcSchoolResult("慶應", cfg, "P", data[gender] || {});
+
   return (
     <>
     <div style={{ display: "grid", gap: 12 }}>
@@ -895,12 +889,43 @@ function DiffTables({ gender, schoolResults, config, completedEvents, data, mode
                 </tr>
               );
             })}
+            {/* 慶應 想定差行（総合） */}
+            {(() => {
+              const dPlan = keio.result.grandTotal !== null && keioPlannedSchoolResult.grandTotal !== null
+                ? keio.result.grandTotal - keioPlannedSchoolResult.grandTotal : null;
+              return (
+                <tr
+                  onClick={() => setDiffPopup({ school: "慶應", event: "slalom" })}
+                  style={{ background: C.accent + "0d", cursor: "pointer" }}
+                >
+                  <td style={{ padding: "8px 10px", fontSize: 11, color: C.muted }}>慶應 想定差 <span style={{ fontSize: 10, color: C.muted }}>▶</span></td>
+                  <td style={{ padding: "8px 8px", textAlign: "center", fontFamily: "monospace", fontWeight: 700, color: diffColor(dPlan) }}>{signStr(dPlan, "pt")}</td>
+                  {EVENTS.map(e => {
+                    const kEv = keio.result.ev[e];
+                    const pEv = keioPlannedSchoolResult.ev[e];
+                    const d = kEv.totalPts !== null && pEv.totalPts !== null ? kEv.totalPts - pEv.totalPts : null;
+                    const effPin = e === "jump" ? Math.max(0, parseFloat(cfg.pin[e]) - parseFloat(cfg.handicap)) : parseFloat(cfg.pin[e]);
+                    return (
+                      <td key={e} style={{ padding: "6px 4px", textAlign: "center", fontFamily: "monospace", fontSize: 11, color: d === null ? C.muted : ECFG[e].color, whiteSpace: "nowrap" }}>
+                        {d === null ? "—" : `${d >= 0 ? "+" : "-"}${ptToUnit(Math.abs(d), effPin)}${ECFG[e].unit}`}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })()}
           </tbody>
         </table>
       </div>
       {EVENTS.map(e => {
         const ecfg = ECFG[e];
         const done = completedEvents.includes(e);
+        const keioPlannedEv = keioPlannedSchoolResult.ev[e];
+        const keioActualEv = keio.result.ev[e];
+        const dPts = keioActualEv.totalPts !== null && keioPlannedEv.totalPts !== null
+          ? keioActualEv.totalPts - keioPlannedEv.totalPts : null;
+        const dScore = keioActualEv.totalScore !== null && keioPlannedEv.totalScore !== null
+          ? parseFloat((keioActualEv.totalScore - keioPlannedEv.totalScore).toFixed(1)) : null;
         return (
           <div key={e} style={{ background: C.surface, border: `1px solid ${ecfg.color}33`, borderRadius: 12, overflow: "hidden" }}>
             <SectionHeader title={`${ecfg.label}　慶應 vs 各校${done ? " ✅完了" : ""}`} color={done ? C.positive : ecfg.color} right="得点差 / 換算pt差" />
@@ -933,6 +958,18 @@ function DiffTables({ gender, schoolResults, config, completedEvents, data, mode
                     </tr>
                   );
                 })}
+                {/* 慶應 想定差行（種目別） */}
+                <tr
+                  onClick={() => setDiffPopup({ school: "慶應", event: e })}
+                  style={{ background: ecfg.color + "0d", cursor: "pointer" }}
+                >
+                  <td style={{ padding: "8px 10px", fontSize: 11, color: C.muted }}>慶應 想定差 <span style={{ fontSize: 10, color: C.muted }}>▶</span></td>
+                  <td style={{ padding: "6px 8px", textAlign: "center" }}>
+                    <div style={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: diffColor(dScore) }}>{dScore !== null ? `${dScore >= 0 ? "+" : ""}${dScore}${ecfg.unit}` : "—"}</div>
+                    <div style={{ fontFamily: "monospace", fontSize: 11, color: diffColor(dPts), marginTop: 2 }}>{signStr(dPts, "pt")}</div>
+                  </td>
+                  <td style={{ padding: "6px 8px", textAlign: "center", fontSize: 10, color: C.muted }}>実績 vs 想定</td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -945,7 +982,7 @@ function DiffTables({ gender, schoolResults, config, completedEvents, data, mode
           gender={gender}
           school={diffPopup.school}
           event={diffPopup.event || "slalom"}
-          mode={mode || "B"}
+          mode={diffPopup.school === "慶應" ? "B" : (mode || "B")}
           config={config}
           data={data}
           onClose={() => setDiffPopup(null)}
@@ -957,10 +994,15 @@ function DiffTables({ gender, schoolResults, config, completedEvents, data, mode
 
 function EventBreakdown({ gender, schoolResults, mode, config, data }) {
   const [popup, setPopup] = useState(null);
+  const cfg = config[gender];
   return (
     <div style={{ display: "grid", gap: 12 }}>
       {EVENTS.map(e => {
         const ecfg = ECFG[e];
+        const keioPlanned = calcEventResult(data[gender]?.[e]?.["慶應"] || [], e, cfg.pin[e], cfg.topN, "P", cfg.handicap);
+        const keioActual = schoolResults.find(r => r.school === "慶應")?.result.ev[e];
+        const dPts = keioActual?.totalPts !== null && keioActual?.totalPts !== undefined && keioPlanned.totalPts !== null
+          ? keioActual.totalPts - keioPlanned.totalPts : null;
         return (
           <div key={e} style={{ background: C.surface, border: `1px solid ${ecfg.color}33`, borderRadius: 12, overflow: "hidden" }}>
             <SectionHeader title={`${ecfg.label}　内訳`} color={ecfg.color} right="行をタップで選手詳細 ▶" />
@@ -993,6 +1035,19 @@ function EventBreakdown({ gender, schoolResults, mode, config, data }) {
                     </tr>
                   );
                 })}
+                {/* 慶應 想定差行（一番下） */}
+                <tr onClick={() => setPopup({ school: "慶應", event: e })} style={{ background: C.accent + "0d", cursor: "pointer" }}>
+                  <td style={{ padding: "8px 10px", fontSize: 11, color: C.muted }}>
+                    慶應 想定差 <span style={{ fontSize: 10, color: C.muted }}>▶</span>
+                  </td>
+                  <td style={{ padding: "8px 8px", textAlign: "center", fontSize: 10, color: C.muted, fontFamily: "monospace" }}>
+                    {keioPlanned.totalScore !== null ? `想定${e === "jump" ? keioPlanned.totalScore.toFixed(1) : keioPlanned.totalScore}${ecfg.unit}` : "—"}
+                  </td>
+                  <td style={{ padding: "8px 8px", textAlign: "center", fontFamily: "monospace", fontWeight: 700, color: diffColor(dPts) }}>
+                    {signStr(dPts, "pt")}
+                  </td>
+                  <td></td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -1162,7 +1217,6 @@ export default function App() {
     }
   };
 
-  const [showImport, setShowImport] = useState(false);
   const [configSaving, setConfigSaving] = useState(false);
   const [configSaved,  setConfigSaved]  = useState(false);
   const configSaving_ref = useRef(false);
@@ -1182,7 +1236,7 @@ export default function App() {
         <div style={{ maxWidth: 900, margin: "0 auto", padding: "10px 16px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <img
-              src="data:image/png;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADb/2wBDAAUDBAQEAwUEBAQFBQUGBwwIBwcHBw8LCwkMEQ8SEhEPERETFhwXExQaFRERGCEYGh0dHx8fExciJCIeJBweHx7/2wBDAQUFBQcGBw4ICA4eFBEUHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh7/wAARCAEYAYMDASIAAhEBAxEB/8QAHQABAAIDAQEBAQAAAAAAAAAAAAcIBQYJBAMBAv/EAFgQAAEDAwIDBAMHDQ0GBAcAAAEAAgMEBQYHERIhMQgTQVEiYXEUGEJSgZTTFRcjMlRVYnKCkZKhsxYkMzY3OFd0dYSVtNIJQ1N2orE0VrLBRWODk8LD0f/EABYBAQEBAAAAAAAAAAAAAAAAAAABAv/EABkRAQEBAQEBAAAAAAAAAAAAAAABESExQf/aAAwDAQACEQMRAD8AuWiIgIiICIiAiIgIiICIiAiL+JpoYeDvpWR8bwxvEdt3HoPaUH9oiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgLzXSgpbnbp7fWxCWnqGFkjdyNwfIjmCOoI5g8wvSiCFbXqTW6dZw3T/UysL6Ko9KxZFKOFtRFvsI6g9BI3cNL+QPIkDfczS1zXNDmkOaRuCDyIWk616d2zUvCKmxVvBFVs3loKot3NPMByP4p6EeIPnsqvaNa15HpHkEun2ocNTUWmhm9zHfd81v25As+PFtsQ3y2LfIlXYReOyXW23u1U91tFbBW0NSzjhnhfxMePUV7EQREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBV87YGkH7sLC7Msfpi6/WyE+6IY27urKccyNhzL2cyPEjcc/R2sGiDnHobrDkel92/erjXWSd/FV22R2zXdAXsPwH7Dr0PQg8tr7ab51jeoGOx3zG65tRCdmzQu9GWnf4skb8E/qPUEjmqjdsTSE4pfnZtYKYix3Ob99xRt9GjqD7OjHncjwDtxy3aFDmnWcZHgGQx3vGq40842bLG4cUU7N9+CRviPzEeBBRrNdQkUCY92qdOanFILjenV1vuv2s1uip3TO4gBuWP2DS078tyD6ljx2vdPu82OP5R3e/23cwb7ezvf/dExYtFEWN9pDSW9TMhOQSWyV/RtwpnxAe14BYPlcpTtVxt92oY6+111LXUko3jnp5WyRvHmHNJBRHqRF86uogpKaWqqpo4IIml8kkjg1rGjqSTyAQKqeClppampmjhgiYXySSODWsaBuSSeQAHivyiqYayjhq6dxdDPG2SMlpBLXDcHY8xyPiqpai6nVOtWpNr0rwqWVuMVFU0XSsYHNdVwsPFIRy3bGGtO2+3E7bfYbK14EVPAB6McUbfYGtA/UNkH9ooVxjU12pWtzLBicz34tjsUlVcK1n2tdPsY42NP/DDnFw+MWb9AN5qQEXwjrKaSumoY5Q6ogYySVg+AH8XDv7eF3L1exfdAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERBjcotlpvOOXC132GKa11NO9lU2U7N7vbmd/Dbrv4bbrlzkMVrgv1fDZKqertjKiRtHPNHwPkiDjwOc3wJG3/APB0V/e15fZ7FoTezTP4JbgY6AH8GR3p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8+DWjmfzDmQF0wwfHKDEcRtmNWxu1Lb6dsLDtsXkc3PPrc4lx9ZKFZlERGXLbUP+P+Rf2rU/tXLBLO6h/wAf8i/tWp/auWCRtNfYo/l6oP6lU/s1ftUE7FH8vVB/Uqn9mr9ozREREEREBERAREQEREBERAREQUU7U+C5vedecjuVow7IrjQze5e6qaW2TSxP2pYWnZzWkHYgg7eIKjH62OpP9HuW/wCDVH+hdOURdc7dJNO9QKLVXEa2twXJ6alp75RSzTTWmdjI2NnYXOc4t2AABJJ6LokiIW6KP+0DgceoemNyskcbTcYm+6rc4/BnYDwjfwDgSw+pykBERzG+tjqT/R7lv+DVH+hPrY6k/wBHuW/4NUf6F05RF1zG+tjqT/R7lv8Ag1R/oU2aE5xrXp7HDZbvpzmN8x1uzWQOtNQJqUb/AO6cWc2/gHl02Lee9zUQ1isWvtPkNrbX09DdqEHk6C5UEtJKw+RbI0b+0bj1qk/ag0xzGXWu+XCwYlfLnb68x1TJqK3SzR8TmN4wXMaRvxhx29YV7UQlcxvrY6k/0e5b/g1R/oX1otKtSqqshpm4Fk8RmkbGHy2mdjG7nbdzizYAeJPRdNEQ14MdtdNY7Bb7NRtDaegpY6aIAbeixoaP1Be9EREadp3E6jMdGL3baGmkqa+na2spI44zI98kbty1rRzLnN42gDxcqI/Wx1J/o9y3/Bqj/QunKIsuOY31sdSf6Pct/wAGqP8AQrHdhvAcgsOQZHfskx652iVtLFSUvu+kfA6QPcXycIeBuB3ce59atWiGiIiI1bVDAse1ExeSw5DTudGTxwTxkCWnk22D2HwPqPIjkVTfUHsvaiY/USSWCKDJaDf0X0zhHMB+FG49fxS5XxRF1y3ueGZha3llyxW+UZB2Pf0ErPPzb6isCusyIuuV1oxvIrwGm0WC63AP34TS0ckvFz25cIPkfzKVtP8Asz6lZLUsddaFmN0B2Lp64gybfgxNPFv6ncPXqr9oia0PR3SrF9MLO+lskLp62oA9118+xlnI8PJrR4NHy7nmt8REQREQc386041Dqc3v1RT4FlM0MtyqHxyR2idzXtMriCCGbEEeKw31sdSf6Pct/wAGqP8AQunKIuqSdkPCczsetdFcL1iN/tlG2kqGuqKy2zQxglmwBc5oG5V20REoiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIg//9k="
+              src="data:image/png;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADb/2wBDAAUDBAQEAwUEBAQFBQUGBwwIBwcHBw8LCwkMEQ8SEhEPERETFhwXExQaFRERGCEYGh0dHx8fExciJCIeJBweHx7/2wBDAQUFBQcGBw4ICA4eFBEUHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh7/wAARCAEYAYMDASIAAhEBAxEB/8QAHQABAAIDAQEBAQAAAAAAAAAAAAcIBQYJBAMBAv/EAFgQAAEDAwIDBAMHDQ0GBAcAAAEAAgMEBQYHERIhMQgTQVEiYXEUGEJSgZTTFRcjMlRVYnKCkZKhsxYkMzY3OFd0dYSVtNIJQ1N2orE0VrLBRWODk8LD0f/EABYBAQEBAAAAAAAAAAAAAAAAAAABAv/EABkRAQEBAQEBAAAAAAAAAAAAAAABESExQf/aAAwDAQACEQMRAD8AuWiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIg//9k="
               alt="KWST"
               style={{ height: 44, objectFit: "contain", flexShrink: 0,
                 filter: "invert(1) sepia(1) saturate(4) hue-rotate(10deg)" }}
@@ -1219,7 +1273,7 @@ export default function App() {
             <div style={{ fontSize: 14 }}>データを読み込んでいます...</div>
           </div>
         )}
-        {!loading && tab === "settings" && <SettingsTab config={config} setConfig={setConfig} onReset={handleReset} onImport={() => setShowImport(true)} onSave={handleSaveConfig} saving={configSaving} saved={configSaved} gender={gender} />}
+        {!loading && tab === "settings" && <SettingsTab config={config} setConfig={setConfig} onReset={handleReset} onSave={handleSaveConfig} saving={configSaving} saved={configSaved} gender={gender} />}
         {!loading && tab === "input"    && <InputTab config={config} data={data} setData={setData} gender={gender} saveSkierDebounced={saveSkierDebounced} />}
         {!loading && tab === "result"   && <ResultTab config={config} data={data} gender={gender} />}
         {tab === "sokuho"               && <SokuhoTab />}
@@ -1229,213 +1283,6 @@ export default function App() {
         <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 14px", fontSize: 11, color: C.muted, lineHeight: 1.8 }}>
           ☁️ データはSupabaseに自動保存・リアルタイム同期されます（10秒ごと更新）。設定タブからリセット可能です。
         </div>
-      </div>
-
-      {showImport && <ImportModal onClose={() => setShowImport(false)} />}
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────
-// IMPORT MODAL（リザルト読み込み）
-// ─────────────────────────────────────────────────────────────────
-function ImportModal({ onClose }) {
-  const [step, setStep] = useState("upload");
-  const [matchedData, setMatchedData] = useState([]);
-  const [compName, setCompName] = useState("");
-  const [heldDate, setHeldDate] = useState("");
-  const [compId, setCompId] = useState("");
-  const [registering, setRegistering] = useState(false);
-  const [error, setError] = useState(null);
-  const fileInputRef = useRef(null);
-  const cameraInputRef = useRef(null);
-
-  async function readFileAsBase64(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result.split(",")[1]);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  }
-
-  async function handleFile(file) {
-    if (!file) return;
-    setStep("loading");
-    setError(null);
-    try {
-      const isImage = file.type.startsWith("image/");
-      const isPdf   = file.type === "application/pdf";
-      const base64  = await readFileAsBase64(file);
-      const prompt = `このファイルは水上スキー大会のリザルト（結果表）です。5校（慶應、法政、立教、福大、学習院）の選手データのみを抽出してください。以下のJSON形式のみで返してください：{"competition_name":"大会名","held_date":"YYYY-MM-DD","results":[{"en_name":"英語名","slalom":"スコアまたはnull","trick":数値またはnull,"jump":数値またはnull}]}`;
-
-      let messages;
-      if (isImage) {
-        messages = [{ role: "user", content: [{ type: "image", source: { type: "base64", media_type: file.type, data: base64 } }, { type: "text", text: prompt }] }];
-      } else if (isPdf) {
-        messages = [{ role: "user", content: [{ type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } }, { type: "text", text: prompt }] }];
-      } else {
-        messages = [{ role: "user", content: prompt }];
-      }
-
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 4000, messages }),
-      });
-      const apiData = await res.json();
-      const text = apiData.content?.map(c => c.text || "").join("") || "";
-      const clean = text.replace(/```json|```/g, "").trim();
-      const parsed = JSON.parse(clean);
-
-      setCompName(parsed.competition_name || "");
-      setHeldDate(parsed.held_date || "");
-      const autoId = (parsed.competition_name || "").toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "") || "comp_" + Date.now();
-      setCompId(autoId);
-
-      // 選手マッチング
-      const players = await sbFetch("players?select=*");
-      const matched = (parsed.results || []).map(r => {
-        const player = players?.find(p => {
-          const ens = Array.isArray(p.en_names) ? p.en_names : (typeof p.en_names === 'string' ? JSON.parse(p.en_names || "[]") : []);
-          return ens.some(en => en.toLowerCase() === (r.en_name || "").toLowerCase());
-        });
-        return { ...r, player: player || null, matched: !!player };
-      });
-      setMatchedData(matched);
-      setStep("confirm");
-    } catch(e) {
-      console.error(e);
-      setError("読み取りに失敗しました。ファイルを確認してください。");
-      setStep("upload");
-    }
-  }
-
-  async function handleRegister() {
-    setRegistering(true);
-    try {
-      await sbFetch("competitions?on_conflict=id", {
-        method: "POST",
-        headers: { "Prefer": "resolution=merge-duplicates" },
-        body: JSON.stringify({ id: compId, name: compName, short: compId, held_date: heldDate }),
-      });
-      for (const r of matchedData.filter(r => r.matched)) {
-        for (const event of ["slalom", "trick", "jump"]) {
-          if (r[event] === null || r[event] === undefined) continue;
-          await sbFetch("player_results?on_conflict=player_id,competition_id,event", {
-            method: "POST",
-            headers: { "Prefer": "resolution=merge-duplicates" },
-            body: JSON.stringify({ player_id: r.player.id, competition_id: compId, event, score_raw: String(r[event]) }),
-          });
-        }
-      }
-      setStep("done");
-    } catch(e) { setError("登録に失敗しました: " + e.message); }
-    setRegistering(false);
-  }
-
-  const matchedCount = matchedData.filter(r => r.matched).length;
-  const unmatchedCount = matchedData.filter(r => !r.matched).length;
-
-  return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 600, background: C.overlay, backdropFilter: "blur(6px)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: C.surface, border: `1px solid ${C.slalom}33`, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 600, padding: "20px 16px 44px", maxHeight: "85vh", overflowY: "auto" }}>
-        <div style={{ width: 36, height: 4, background: C.border, borderRadius: 2, margin: "0 auto 16px" }} />
-        <input ref={fileInputRef} type="file" accept=".pdf,.xlsx,.xls,.csv,image/*" style={{ display: "none" }} onChange={e => handleFile(e.target.files?.[0])} />
-        <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={e => handleFile(e.target.files?.[0])} />
-
-        {step === "upload" && (
-          <>
-            <div style={{ fontSize: 16, fontWeight: 700, color: C.slalom, marginBottom: 4 }}>📥 リザルトを読み込む</div>
-            <div style={{ fontSize: 12, color: C.muted, marginBottom: 16 }}>大会リザルトをAIで自動読み取りします</div>
-            {error && <div style={{ background: C.negative + "22", border: `1px solid ${C.negative}44`, borderRadius: 10, padding: 12, color: C.negative, fontSize: 13, marginBottom: 14 }}>{error}</div>}
-            <div onClick={() => fileInputRef.current?.click()} style={{ border: `2px dashed ${C.border}`, borderRadius: 10, padding: "28px 16px", textAlign: "center", cursor: "pointer", background: C.bg, marginBottom: 12 }}>
-              <div style={{ fontSize: 36, marginBottom: 10 }}>📄</div>
-              <div style={{ fontSize: 14, color: C.text, fontWeight: 500, marginBottom: 6 }}>タップしてファイルを選択</div>
-              <div style={{ fontSize: 12, color: C.muted }}>PDF・Excel・写真に対応</div>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
-              <button onClick={() => cameraInputRef.current?.click()} style={{ background: C.men + "22", border: `1px solid ${C.men}44`, borderRadius: 10, color: C.men, fontSize: 13, fontWeight: 700, padding: 12, cursor: "pointer" }}>📷 カメラで撮影</button>
-              <button onClick={() => fileInputRef.current?.click()} style={{ background: C.jump + "22", border: `1px solid ${C.jump}44`, borderRadius: 10, color: C.jump, fontSize: 13, fontWeight: 700, padding: 12, cursor: "pointer" }}>📁 ファイル選択</button>
-            </div>
-            <div style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 10, padding: 14 }}>
-              {[{ n:1, t:"ファイルをアップロード", s:"PDF・Excel・写真・カメラ撮影OK" }, { n:2, t:"AIが自動で読み取る", s:"選手名・スコアを自動認識" }, { n:3, t:"内容を確認して登録", s:"間違いがあれば修正できます" }].map(({ n, t, s }) => (
-                <div key={n} style={{ display: "flex", gap: 10, marginBottom: n < 3 ? 10 : 0, alignItems: "flex-start" }}>
-                  <div style={{ width: 24, height: 24, borderRadius: "50%", background: C.accent + "22", border: `1px solid ${C.accent}44`, color: C.accent, fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{n}</div>
-                  <div><div style={{ fontSize: 13, color: C.text, fontWeight: 500 }}>{t}</div><div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{s}</div></div>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-
-        {step === "loading" && (
-          <div style={{ textAlign: "center", padding: "60px 0" }}>
-            <div style={{ fontSize: 40, marginBottom: 16, display: "inline-block", animation: "spin 1.5s linear infinite" }}>🌊</div>
-            <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
-            <div style={{ fontSize: 14, color: C.text, marginBottom: 8 }}>AIがリザルトを解析中...</div>
-            <div style={{ fontSize: 12, color: C.muted }}>選手名・スコアを認識しています</div>
-          </div>
-        )}
-
-        {step === "confirm" && (
-          <>
-            <div style={{ fontSize: 16, fontWeight: 700, color: C.accent, marginBottom: 14 }}>✅ 読み取り結果を確認</div>
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 11, color: C.muted, marginBottom: 4 }}>大会名</div>
-              <input value={compName} onChange={e => setCompName(e.target.value)} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, fontSize: 13, padding: "8px 10px", width: "100%", outline: "none", boxSizing: "border-box" }} />
-            </div>
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 11, color: C.muted, marginBottom: 4 }}>開催日</div>
-              <input value={heldDate} onChange={e => setHeldDate(e.target.value)} placeholder="YYYY-MM-DD" style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, fontSize: 13, padding: "8px 10px", width: "100%", outline: "none", boxSizing: "border-box" }} />
-            </div>
-            <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>
-              マッチ <span style={{ color: C.positive, fontWeight: 700 }}>{matchedCount}件</span>
-              {unmatchedCount > 0 && <span>　スキップ {unmatchedCount}件</span>}
-            </div>
-            {matchedData.filter(r => r.matched).map((r, i) => (
-              <div key={i} style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", marginBottom: 8 }}>
-                <div style={{ display: "flex", alignItems: "center", marginBottom: 8 }}>
-                  <div><div style={{ fontSize: 10, color: C.muted }}>{r.en_name} →</div><div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{r.player?.kanji}（{r.player?.school}）</div></div>
-                  <span style={{ marginLeft: "auto", fontSize: 10, color: C.positive, background: C.positive + "22", border: `1px solid ${C.positive}44`, borderRadius: 10, padding: "2px 8px" }}>✅ 自動</span>
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
-                  {["slalom","trick","jump"].map(ev => {
-                    const score = r[ev]; const hasScore = score !== null && score !== undefined;
-                    const color = ev==="slalom"?C.slalom:ev==="trick"?C.trick:C.jump;
-                    const label = ev==="slalom"?"スラローム":ev==="trick"?"トリック":"ジャンプ";
-                    const display = hasScore?(ev==="slalom"?String(score):ev==="trick"?`${Number(score).toLocaleString()}点`:`${score}m`):"—";
-                    return (
-                      <div key={ev} style={{ background: hasScore?color+"11":C.bg, border: `1px solid ${hasScore?color+"44":C.border}`, borderRadius: 6, padding: "6px 8px", textAlign: "center" }}>
-                        <div style={{ fontSize: 10, color: hasScore?color:C.muted, marginBottom: 2 }}>{label}</div>
-                        <div style={{ fontSize: 11, fontFamily: "monospace", color: hasScore?C.text:C.muted, fontWeight: hasScore?700:400 }}>{display}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-            {unmatchedCount > 0 && (
-              <div style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", marginBottom: 8 }}>
-                <div style={{ fontSize: 12, color: C.muted, fontWeight: 700, marginBottom: 6 }}>⚠️ スキップ（{unmatchedCount}名）</div>
-                {matchedData.filter(r => !r.matched).map((r, i) => <div key={i} style={{ fontSize: 12, color: C.muted, marginBottom: 2 }}>• {r.en_name}</div>)}
-              </div>
-            )}
-            <button onClick={handleRegister} disabled={registering} style={{ width: "100%", background: C.accent + "22", border: `1px solid ${C.accent}66`, borderRadius: 10, color: C.accent, fontSize: 14, fontWeight: 700, padding: 13, cursor: "pointer", marginBottom: 8 }}>
-              {registering ? "登録中..." : "✅ データベースに登録する"}
-            </button>
-            <button onClick={() => setStep("upload")} style={{ width: "100%", background: "none", border: `1px solid ${C.border}`, borderRadius: 10, color: C.muted, fontSize: 13, padding: 10, cursor: "pointer" }}>← やり直す</button>
-          </>
-        )}
-
-        {step === "done" && (
-          <div style={{ textAlign: "center", padding: "60px 16px" }}>
-            <div style={{ fontSize: 48, marginBottom: 16 }}>🎉</div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: C.positive, marginBottom: 8 }}>登録完了！</div>
-            <div style={{ fontSize: 13, color: C.muted, marginBottom: 32 }}>{matchedCount}件のリザルトを保存しました</div>
-            <button onClick={onClose} style={{ background: C.accent + "22", border: `1px solid ${C.accent}66`, borderRadius: 10, color: C.accent, fontSize: 14, fontWeight: 700, padding: "12px 32px", cursor: "pointer" }}>閉じる</button>
-          </div>
-        )}
       </div>
     </div>
   );

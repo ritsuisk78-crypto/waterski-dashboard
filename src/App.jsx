@@ -156,12 +156,13 @@ const ECFG = {
   jump:   { label: "ジャンプ",   short: "J", color: C.jump,   unit: "m",    icon: "🚀", step: "0.5" },
 };
 
-const COMP_ORDER = ["cs1_2025","cs2_2025","inkare_2025","shinjin_2025","cs1_2026","cs2_2026"];
+const COMP_ORDER = ["cs1_2025","cs2_2025","inkare_2025","shinjin_2025","cs1_2026","cs2_2026","biwa_2026"];
 const COMP_SHORT = {
   cs1_2025:"CS1'25", cs2_2025:"CS2'25",
   inkare_2025:"全日'25", shinjin_2025:"新人'25",
-  cs1_2026:"CS1'26", cs2_2026:"CS2'26",
+  cs1_2026:"CS1'26", cs2_2026:"CS2'26", biwa_2026:"琵琶湖'26",
 };
+
 
 const DEFAULT_CONFIG = {
   men:   { pin: { slalom: 40, trick: 5500, jump: 50 }, topN: 3, out: 4, handicap: 20, label: "男子", icon: "👨", color: C.men },

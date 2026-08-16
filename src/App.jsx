@@ -628,19 +628,20 @@ function PlayerPopup({ gender, school, event, mode, config, data, onClose }) {
                       <span style={{ fontSize: 10, color: C.muted, opacity: 0.7 }}>📋</span>
                     )}
                   </div>
-                  <div style={{ fontSize: 11, color: C.muted }}>想定: {sk.planned || "—"}{ecfg.unit}</div>
-                  {event === "slalom" && score !== null && (
-                    <div style={{ fontSize: 10, color: ecfg.color, marginTop: 2 }}>
-                      内訳: {slalomBreakdown(score, gender)}
-                    </div>
-                  )}
+                  <div style={{ fontSize: 11, color: C.muted }}>
+                    想定: {sk.planned || "—"}{ecfg.unit}
+                    {event === "slalom" && sk.planned !== "" && ` （${slalomBreakdown(sk.planned, gender)}）`}
+                  </div>
                 </div>
 
                 <div style={{ textAlign: "right" }}>
-                  <div style={{ fontSize: 13, fontFamily: "monospace", fontWeight: 700, color: hasActual ? ecfg.color : C.muted }}>
-                    {displayScore}
-                    {hasActual && <span style={{ fontSize: 9, color: C.positive, marginLeft: 4 }}>実</span>}
-                  </div>
+                   <div style={{ fontSize: 13, fontFamily: "monospace", fontWeight: 700, color: hasActual ? ecfg.color : C.muted }}>
+                {displayScore}
+                {hasActual && <span style={{ fontSize: 9, color: C.positive, marginLeft: 4 }}>実</span>}
+              </div>
+              {event === "slalom" && score !== null && (
+                <div style={{ fontSize: 10, color: C.muted }}>（{slalomBreakdown(score, gender)}）</div>
+              )}
                   <div style={{ fontSize: 12, fontFamily: "monospace", color: isAdopted ? C.accent : C.muted, fontWeight: isAdopted ? 700 : 400 }}>
                     {pts !== null ? `${pts}pt${isAdopted ? " ★" : ""}` : "—"}
                   </div>
@@ -841,18 +842,21 @@ function InputTab({ config, data, setData, gender, saveSkierDebounced }) {
               )}
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-               {event === "slalom" && score !== null && (
-              <div style={{ fontSize: 11, color: ecfg.color, marginTop: -6, marginBottom: 10, marginLeft: 34 }}>
-                内訳: {slalomBreakdown(score, gender)}
-              </div>
-            )}
+               
               <div>
+                <div>
                 <div style={{ fontSize: 10, color: C.muted, marginBottom: 4 }}>想定（{ecfg.unit}）</div>
                 <NumField value={sk.planned} onChange={v => updateSkier(i, "planned", v)} placeholder="—" step={ecfg.step} />
+                {event === "slalom" && sk.planned !== "" && (
+                  <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>（{slalomBreakdown(sk.planned, gender)}）</div>
+                )}
               </div>
               <div>
                 <div style={{ fontSize: 10, color: hasActual ? ecfg.color : C.muted, marginBottom: 4 }}>{hasActual ? "🔴 実際" : "実際"}</div>
                 <NumField value={sk.actual} onChange={v => updateSkier(i, "actual", v)} placeholder="入力" step={ecfg.step} style={{ border: `1px solid ${hasActual ? ecfg.color + "66" : C.border}`, color: hasActual ? ecfg.color : C.text }} />
+                {event === "slalom" && sk.actual !== "" && (
+                  <div style={{ fontSize: 10, color: ecfg.color, marginTop: 2 }}>（{slalomBreakdown(sk.actual, gender)}）</div>
+                )}
               </div>
               <div>
                 <div style={{ fontSize: 10, color: C.muted, marginBottom: 4 }}>換算点</div>

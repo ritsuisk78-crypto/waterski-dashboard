@@ -71,7 +71,27 @@ function formatScore(event, scoreRaw) {
   if (event === "jump")  return `${scoreRaw}m`;
   return scoreRaw;
 }
+// ─── スラローム内訳変換（合計ブイ数 → ○ブイ@スピード/ロープ長）─────
+const SLALOM_ROPE_SEQUENCE = [18.25, 16, 14.25, 13, 12, 11.25, 10.75, 10.25, 9.75];
+function slalomBreakdown(totalBuoys, gender) {
+  const v = parseFloat(totalBuoys);
+  if (isNaN(v) || v < 0) return null;
+  const maxSpeed = gender === "women" ? 55 : 58;
+  const startSpeed = maxSpeed - 9; // 男49km/h・女46km/hからスタートする慣例
+  const speedSteps = (maxSpeed - startSpeed) / 3; // 3回の加速で最高速に到達
+  const buoysPerPass = 6;
 
+  const fullPasses = Math.floor(v / buoysPerPass);
+  const partial = Math.round((v - fullPasses * buoysPerPass) * 100) / 100;
+
+  if (fullPasses < speedSteps) {
+    const speed = startSpeed + 3 * fullPasses;
+    return `${partial}@${speed}km`;
+  }
+  const ropeIdx = fullPasses - speedSteps;
+  const rope = SLALOM_ROPE_SEQUENCE[Math.min(ropeIdx, SLALOM_ROPE_SEQUENCE.length - 1)];
+  return `${partial}@${rope}m`;
+}
 // ─── 既存コードと同一定数 ────────────────────────────────────────
 async function loadAllScores(initialData) {
   try {
@@ -609,6 +629,11 @@ function PlayerPopup({ gender, school, event, mode, config, data, onClose }) {
                     )}
                   </div>
                   <div style={{ fontSize: 11, color: C.muted }}>想定: {sk.planned || "—"}{ecfg.unit}</div>
+                  {event === "slalom" && score !== null && (
+                    <div style={{ fontSize: 10, color: ecfg.color, marginTop: 2 }}>
+                      内訳: {slalomBreakdown(score, gender)}
+                    </div>
+                  )}
                 </div>
 
                 <div style={{ textAlign: "right" }}>
@@ -816,6 +841,11 @@ function InputTab({ config, data, setData, gender, saveSkierDebounced }) {
               )}
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+               {event === "slalom" && score !== null && (
+              <div style={{ fontSize: 11, color: ecfg.color, marginTop: -6, marginBottom: 10, marginLeft: 34 }}>
+                内訳: {slalomBreakdown(score, gender)}
+              </div>
+            )}
               <div>
                 <div style={{ fontSize: 10, color: C.muted, marginBottom: 4 }}>想定（{ecfg.unit}）</div>
                 <NumField value={sk.planned} onChange={v => updateSkier(i, "planned", v)} placeholder="—" step={ecfg.step} />

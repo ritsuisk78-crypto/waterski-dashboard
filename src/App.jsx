@@ -715,7 +715,6 @@ function SettingsTab({ config, setConfig, onReset, onSave, saving, saved, gender
           );
         })()}
       </div>
-      </div>
       {/* 設定保存ボタン */}
       <button
         onClick={onSave}

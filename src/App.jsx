@@ -710,7 +710,7 @@ function SettingsTab({ config, setConfig, onReset, onSave, saving, saved, gender
           const trickEquiv = Math.round(parseFloat(cfg.pin.trick) / effJump);
           return (
             <div style={{ marginTop: 6, fontSize: 11, color: C.jump }}>
-              🚀 ジャンプ1m ≒ 🌊スラローム{slalomEquiv}ブイ ≒ 🔄トリック{trickEquiv}点（現ピン・ハンデ換算）
+              ジャンプ1m ≒ スラローム{slalomEquiv}ブイ ≒ トリック{trickEquiv}点（現ピン・ハンデ換算）
             </div>
           );
         })()}

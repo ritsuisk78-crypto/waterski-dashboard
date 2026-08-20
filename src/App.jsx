@@ -1211,14 +1211,15 @@ function ResultTab({ config, data, gender }) {
         ))}
       </div>
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-        {[{ key: "diff", label: "📉 差分分析" }, { key: "breakdown", label: "📋 種目別内訳" }].map(v => (
+           <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+        {[{ key: "diff", label: "📉 差分分析" }, { key: "breakdown", label: "📋 種目別内訳" }, { key: "planned", label: "📌 想定" }].map(v => (
           <button key={v.key} onClick={() => setView(v.key)} style={{ flex: 1, background: view === v.key ? C.surface : C.surface2, border: `1px solid ${view === v.key ? C.accent : C.border}`, borderRadius: 8, color: view === v.key ? C.accent : C.muted, fontSize: 13, fontWeight: view === v.key ? 700 : 400, padding: "8px", cursor: "pointer" }}>{v.label}</button>
         ))}
       </div>
 
       {view === "diff" && <DiffTables gender={gender} schoolResults={schoolResults} config={config} completedEvents={completedEvents} data={data} mode={mode} />}
       {view === "breakdown" && <EventBreakdown gender={gender} schoolResults={schoolResults} mode={mode} config={config} data={data} />}
+      {view === "planned" && <PlannedBreakdown gender={gender} config={config} data={data} />}
     </div>
   );
 }

@@ -1101,7 +1101,60 @@ function EventBreakdown({ gender, schoolResults, mode, config, data }) {
     </div>
   );
 }
-
+function PlannedBreakdown({ gender, config, data }) {
+  const [popup, setPopup] = useState(null);
+  const cfg = config[gender];
+  const schoolResults = SCHOOLS.map(school => ({
+    school,
+    result: calcSchoolResult(school, cfg, "P", data[gender] || {}),
+  }));
+  return (
+    <div style={{ display: "grid", gap: 12 }}>
+      <div style={{
+        background: C.accent + "11", border: `1px solid ${C.accent}44`, borderRadius: 10,
+        padding: "10px 14px", fontSize: 11, color: C.accent, display: "flex", alignItems: "center", gap: 8,
+      }}>
+        📌 このタブは想定値のみで計算した参考表示です。行をタップで選手別の想定内訳が見られます。
+      </div>
+      {EVENTS.map(e => {
+        const ecfg = ECFG[e];
+        return (
+          <div key={e} style={{ background: C.surface, border: `1px solid ${ecfg.color}33`, borderRadius: 12, overflow: "hidden" }}>
+            <SectionHeader title={`${ecfg.icon} ${ecfg.label}　想定内訳`} color={ecfg.color} right="行をタップで選手詳細 ▶" />
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+              <thead>
+                <tr style={{ background: C.bg, borderBottom: `1px solid ${C.border}` }}>
+                  <th style={{ padding: "6px 10px", textAlign: "left", color: C.muted }}>学校</th>
+                  <th style={{ padding: "6px 8px", textAlign: "center", color: ecfg.color }}>想定得点</th>
+                  <th style={{ padding: "6px 8px", textAlign: "center", color: C.accent }}>換算pt</th>
+                </tr>
+              </thead>
+              <tbody>
+                {schoolResults.map(({ school, result }) => {
+                  const ev = result.ev[e];
+                  return (
+                    <tr key={school} onClick={() => setPopup({ school, event: e })} style={{ borderBottom: `1px solid ${C.border}`, background: school === "慶應" ? C.keio + "11" : "transparent", cursor: "pointer" }}>
+                      <td style={{ padding: "10px 10px", fontWeight: school === "慶應" ? 700 : 400, color: school === "慶應" ? C.keio : C.text }}>
+                        {school} <span style={{ fontSize: 10, color: C.muted }}>▶</span>
+                      </td>
+                      <td style={{ padding: "10px 8px", textAlign: "center", fontFamily: "monospace", color: ecfg.color }}>
+                        {ev.totalScore !== null ? `${e === "jump" ? ev.totalScore.toFixed(1) : ev.totalScore}${ecfg.unit}` : "—"}
+                      </td>
+                      <td style={{ padding: "10px 8px", textAlign: "center", fontFamily: "monospace", color: C.accent, fontWeight: 700 }}>
+                        {ev.totalPts !== null ? `${ev.totalPts}pt` : "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        );
+      })}
+      {popup && <PlayerPopup gender={gender} school={popup.school} event={popup.event} mode="P" config={config} data={data} onClose={() => setPopup(null)} />}
+    </div>
+  );
+}
 function ResultTab({ config, data, gender }) {
   const [mode, setMode] = useState("B");
   const [view, setView] = useState("diff");

@@ -944,17 +944,15 @@ function DiffTables({ gender, schoolResults, config, completedEvents, data, mode
                 >
                   <td style={{ padding: "8px 10px", fontSize: 11, color: C.muted }}>慶應 想定差 <span style={{ fontSize: 10, color: C.muted }}>▶</span></td>
                   <td style={{ padding: "8px 8px", textAlign: "center", fontFamily: "monospace", fontWeight: 700, color: diffColor(dPlan) }}>{signStr(dPlan, "pt")}</td>
-                  {EVENTS.map(e => {
-                    const kEv = keio.result.ev[e];
-                    const pEv = keioPlannedSchoolResult.ev[e];
-                    const d = kEv.totalPts !== null && pEv.totalPts !== null ? kEv.totalPts - pEv.totalPts : null;
+                                    {EVENTS.map(e => {
                     const effPin = e === "jump" ? Math.max(0, parseFloat(cfg.pin[e]) - parseFloat(cfg.handicap)) : parseFloat(cfg.pin[e]);
                     return (
-                      <td key={e} style={{ padding: "6px 4px", textAlign: "center", fontFamily: "monospace", fontSize: 11, color: d === null ? C.muted : ECFG[e].color, whiteSpace: "nowrap" }}>
-                        {d === null ? "—" : `${d >= 0 ? "+" : "-"}${ptToUnit(Math.abs(d), effPin)}${ECFG[e].unit}`}
+                      <td key={e} style={{ padding: "6px 4px", textAlign: "center", fontFamily: "monospace", fontSize: 11, color: dPlan === null ? C.muted : ECFG[e].color, whiteSpace: "nowrap" }}>
+                        {dPlan === null ? "—" : `${dPlan >= 0 ? "+" : "-"}${ptToUnit(Math.abs(dPlan), effPin)}${ECFG[e].unit}`}
                       </td>
                     );
                   })}
+
                 </tr>
               );
             })()}

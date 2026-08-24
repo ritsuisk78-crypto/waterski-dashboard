@@ -1010,7 +1010,18 @@ function DiffTables({ gender, schoolResults, config, completedEvents, data, mode
                     <div style={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: diffColor(dScore) }}>{dScore !== null ? `${dScore >= 0 ? "+" : ""}${dScore}${ecfg.unit}` : "—"}</div>
                     <div style={{ fontFamily: "monospace", fontSize: 11, color: diffColor(dPts), marginTop: 2 }}>{signStr(dPts, "pt")}</div>
                   </td>
-                  <td style={{ padding: "6px 8px", textAlign: "center", fontSize: 10, color: C.muted }}>実績 vs 想定</td>
+                                    <td style={{ padding: "6px 8px", textAlign: "center", fontSize: 9, color: C.muted, lineHeight: 1.7 }}>
+                    {dPts === null ? "実績 vs 想定" : EVENTS.filter(ev2 => ev2 !== e).map(ev2 => {
+                      const ecfg2 = ECFG[ev2];
+                      const effPin2 = ev2 === "jump" ? Math.max(0, parseFloat(cfg.pin.jump) - parseFloat(cfg.handicap)) : parseFloat(cfg.pin[ev2]);
+                      const amount = Math.round((dPts / 1000) * effPin2 * 100) / 100;
+                      return (
+                        <div key={ev2} style={{ color: ecfg2.color }}>
+                          {ecfg2.label}換算 {amount >= 0 ? "+" : ""}{amount}{ecfg2.unit}
+                        </div>
+                      );
+                    })}
+                  </td>
                 </tr>
               </tbody>
             </table>

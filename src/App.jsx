@@ -124,7 +124,7 @@ async function saveSkier(gender, event, school, idx, skier) {
 }
 async function resetAllActuals() {
   try {
-    await sbFetch("scores", {
+    await sbFetch("scores?gender=in.(men,women)", {
       method: "PATCH",
       body: JSON.stringify({ actual: "" }),
     });

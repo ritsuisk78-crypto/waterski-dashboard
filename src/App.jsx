@@ -1449,9 +1449,9 @@ function ResultButtons({ compCode }) {
     { key:"mj", gender:"men",   event:"jump",   label:"ジャンプ",   gLabel:"男子" },
     { key:"wj", gender:"women", event:"jump",   label:"ジャンプ",   gLabel:"女子" },
   ];
-  function getPdfUrl(code, genderKey, eventKey, round) {
+    function getPdfUrl(code, genderKey, eventKey, round) {
     const year = code.slice(0, 2);
-    const base = `https://www.iwwfed-ea.org/classic/${year}/${code}/`;
+    const base = `https://www.iwwfed-ea.net/classic/${year}/${code}/`;
     const gStr = genderKey === "men" ? "men" : "women";
     if (round === "round1") return `${base}${gStr}_${eventKey}_round_1_results.pdf`;
     return `${base}${gStr}_${eventKey}_overall_results.pdf`;

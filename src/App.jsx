@@ -226,7 +226,7 @@ function calcConv(rawScore, event, pin, handicap) {
   const v = parseFloat(score);
   const effectivePin = event === "jump" ? Math.max(0, parseFloat(pin) - parseFloat(handicap)) : parseFloat(pin);
   if (isNaN(v) || isNaN(effectivePin) || effectivePin <= 0) return null;
-  return Math.min(Math.round((v * 1000) / effectivePin), 1000);
+  return Math.min(Math.round((v * 1000) / effectivePin * 10) / 10, 1000);
 }
 
 function getEffectiveScore(sk, mode) {
@@ -278,7 +278,7 @@ function getCompletedEvents(gender, data) {
 function ptToUnit(ptDiff, pinVal) { return Math.abs((ptDiff * pinVal) / 1000).toFixed(1); }
 function signStr(v, suffix = "") {
   if (v === null || v === undefined) return "—";
-  return (v >= 0 ? "+" : "") + v + suffix;
+  return (v >= 0 ? "+" : "") + v.toFixed(1) + suffix;
 }
 function diffColor(v) { return v === null ? C.muted : v >= 0 ? C.positive : C.negative; }
 
@@ -586,7 +586,7 @@ function PlayerPopup({ gender, school, event, mode, config, data, onClose }) {
             <div style={{ marginLeft: "auto", textAlign: "right" }}>
               <div style={{ fontSize: 11, color: C.muted }}>チーム合計</div>
               <div style={{ fontSize: 20, fontWeight: 900, fontFamily: "monospace", color: C.accent }}>
-                {result.totalPts !== null ? `${result.totalPts}pt` : "—"}
+                                {result.totalPts !== null ? `${result.totalPts.toFixed(1)}pt` : "—"}
               </div>
               {result.totalScore !== null && (
                 <div style={{ fontSize: 11, color: ecfg.color }}>
@@ -652,7 +652,7 @@ function PlayerPopup({ gender, school, event, mode, config, data, onClose }) {
                     <div style={{ fontSize: 10, color: C.muted }}>（{slalomBreakdown(score, gender)}）</div>
                   )}
                   <div style={{ fontSize: 12, fontFamily: "monospace", color: isAdopted ? C.accent : C.muted, fontWeight: isAdopted ? 700 : 400 }}>
-                    {pts !== null ? `${pts}pt${isAdopted ? " ★" : ""}` : "—"}
+                                       {pts !== null ? `${pts.toFixed(1)}pt${isAdopted ? " ★" : ""}` : "—"}
                   </div>
                 </div>
               </div>
@@ -896,7 +896,7 @@ function InputTab({ config, data, setData, gender, saveSkierDebounced }) {
               <div>
                 <div style={{ fontSize: 10, color: C.muted, marginBottom: 4 }}>換算点</div>
                 <div style={{ background: pts !== null ? C.accent + "11" : C.bg, border: `1px solid ${pts !== null ? C.accent + "44" : C.border}`, borderRadius: 6, padding: "8px 10px", fontFamily: "monospace", fontSize: 14, color: pts !== null ? C.accent : C.muted, fontWeight: pts !== null ? 700 : 400, textAlign: "center" }}>
-                  {pts !== null ? `${pts}pt` : "—"}
+ {pts !== null ? `${pts.toFixed(1)}pt` : "—"}
                 </div>
               </div>
             </div>
@@ -1106,7 +1106,7 @@ function EventBreakdown({ gender, schoolResults, mode, config, data }) {
                         {ev.totalScore !== null ? `${e === "jump" ? ev.totalScore.toFixed(1) : ev.totalScore}${ecfg.unit}` : "—"}
                       </td>
                       <td style={{ padding: "10px 8px", textAlign: "center", fontFamily: "monospace", color: C.accent, fontWeight: 700 }}>
-                        {ev.totalPts !== null ? `${ev.totalPts}pt` : "—"}
+                                                {ev.totalPts !== null ? `${ev.totalPts.toFixed(1)}pt` : "—"}
                       </td>
                       <td style={{ padding: "10px 8px", textAlign: "center" }}>
                         <MiniProgress filled={ev.filledActual} total={ev.total} color={ecfg.color} />
@@ -1240,7 +1240,7 @@ function ResultTab({ config, data, gender }) {
         {schoolResults.map(({ school, result }) => (
           <div key={school} style={{ background: school === "慶應" ? C.keio + "22" : C.surface, border: `1px solid ${school === "慶應" ? C.keio : C.border}`, borderRadius: 10, padding: "8px 4px", textAlign: "center" }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: school === "慶應" ? C.keio : C.text, marginBottom: 4 }}>{school}</div>
-            <div style={{ fontSize: 16, fontWeight: 900, fontFamily: "monospace", color: school === "慶應" ? C.keio : C.text }}>{result.grandTotal ?? "—"}</div>
+                       <div style={{ fontSize: 16, fontWeight: 900, fontFamily: "monospace", color: school === "慶應" ? C.keio : C.text }}>{result.grandTotal !== null ? result.grandTotal.toFixed(1) : "—"}</div>
             <div style={{ fontSize: 9, color: C.muted }}>pt</div>
           </div>
         ))}

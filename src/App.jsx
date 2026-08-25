@@ -122,7 +122,14 @@ async function saveSkier(gender, event, school, idx, skier) {
     });
   } catch(e) { console.error("saveSkier error", e); }
 }
-
+async function resetAllActuals() {
+  try {
+    await sbFetch("scores", {
+      method: "PATCH",
+      body: JSON.stringify({ actual: "" }),
+    });
+  } catch(e) { console.error("resetAllActuals error", e); }
+}
 async function loadConfig() {
   try {
     const rows = await sbFetch("app_config?key=eq.config&select=*");
@@ -677,7 +684,7 @@ function PlayerPopup({ gender, school, event, mode, config, data, onClose }) {
 // ─────────────────────────────────────────────────────────────────
 // SETTINGS TAB（既存のまま）
 // ─────────────────────────────────────────────────────────────────
-function SettingsTab({ config, setConfig, onReset, onSave, saving, saved, gender }) {
+function SettingsTab({ config, setConfig, onReset, onSave, saving, saved, gender, onResetActuals, resettingActuals, actualsReset }) {
   const cfg = config[gender];
   const update = (field, val) => setConfig(prev => ({ ...prev, [gender]: { ...prev[gender], [field]: val } }));
   const updatePin = (event, val) => setConfig(prev => ({ ...prev, [gender]: { ...prev[gender], pin: { ...prev[gender].pin, [event]: val } } }));
@@ -731,6 +738,23 @@ function SettingsTab({ config, setConfig, onReset, onSave, saving, saved, gender
       >
         {saved ? "✓ 保存しました" : saving ? "保存中..." : "💾 設定を保存する"}
       </button>
+
+            <div style={{ background: C.surface, border: `1px solid ${C.accent}33`, borderRadius: 12, padding: 16 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: C.accent, marginBottom: 8 }}>🔄 「実際」だけリセット</div>
+        <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>全種目・全校の「実際」の記録だけを消去します。「想定」はそのまま残るので、朝一やシミュレーションの前に使えます。</div>
+        <button
+          onClick={onResetActuals}
+          disabled={resettingActuals}
+          style={{
+            background: actualsReset ? C.positive + "22" : C.accent + "22",
+            border: `1px solid ${actualsReset ? C.positive : C.accent}66`,
+            borderRadius: 8, color: actualsReset ? C.positive : C.accent,
+            fontSize: 13, fontWeight: 700, padding: "10px 20px", cursor: "pointer", width: "100%",
+          }}
+        >
+          {actualsReset ? "✓ リセットしました" : resettingActuals ? "リセット中..." : "🔄 「実際」の記録だけリセット"}
+        </button>
+      </div>
 
       <div style={{ background: C.surface, border: `1px solid ${C.negative}33`, borderRadius: 12, padding: 16 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: C.negative, marginBottom: 8 }}>⚠️ データリセット</div>

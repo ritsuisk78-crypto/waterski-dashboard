@@ -1340,13 +1340,28 @@ export default function App() {
     }, 800);
   }, []);
 
-  const handleReset = async () => {
+   const handleReset = async () => {
     if (window.confirm("全データをリセットしますか？この操作は元に戻せません。")) {
       clearStorage();
       const resetConfig = { men: { ...DEFAULT_CONFIG.men }, women: { ...DEFAULT_CONFIG.women } };
       setConfig(resetConfig);
       setData(buildInitialData());
       await saveConfig(resetConfig);
+    }
+  };
+
+  const [resettingActuals, setResettingActuals] = useState(false);
+  const [actualsReset, setActualsReset] = useState(false);
+
+  const handleResetActuals = async () => {
+    if (window.confirm("全種目・全校の「実際」の記録だけを消去します。「想定」は残ります。よろしいですか？")) {
+      setResettingActuals(true);
+      await resetAllActuals();
+      const loadedData = await loadAllScores(buildInitialData());
+      setData(loadedData);
+      setResettingActuals(false);
+      setActualsReset(true);
+      setTimeout(() => setActualsReset(false), 3000);
     }
   };
 
@@ -1406,7 +1421,7 @@ export default function App() {
             <div style={{ fontSize: 14 }}>データを読み込んでいます...</div>
           </div>
         )}
-        {!loading && tab === "settings" && <SettingsTab config={config} setConfig={setConfig} onReset={handleReset} onSave={handleSaveConfig} saving={configSaving} saved={configSaved} gender={gender} />}
+                {!loading && tab === "settings" && <SettingsTab config={config} setConfig={setConfig} onReset={handleReset} onSave={handleSaveConfig} saving={configSaving} saved={configSaved} gender={gender} onResetActuals={handleResetActuals} resettingActuals={resettingActuals} actualsReset={actualsReset} />}
         {!loading && tab === "input"    && <InputTab config={config} data={data} setData={setData} gender={gender} saveSkierDebounced={saveSkierDebounced} />}
         {!loading && tab === "result"   && <ResultTab config={config} data={data} gender={gender} />}
         {tab === "sokuho"               && <SokuhoTab />}

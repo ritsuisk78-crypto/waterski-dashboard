@@ -1440,26 +1440,63 @@ export default function App() {
 // 速報タブ関連
 // ─────────────────────────────────────────────────────────────────
 function ResultButtons({ compCode }) {
-  const resultsUrl = compCode ? `https://www.iwwfed-ea.net/classic/${compCode}/` : null;
+  const [open, setOpen] = useState(null);
+  const events = [
+    { key:"ms", gender:"men",   event:"slalom", label:"スラローム", gLabel:"男子" },
+    { key:"ws", gender:"women", event:"slalom", label:"スラローム", gLabel:"女子" },
+    { key:"mt", gender:"men",   event:"trick",  label:"トリック",   gLabel:"男子" },
+    { key:"wt", gender:"women", event:"trick",  label:"トリック",   gLabel:"女子" },
+    { key:"mj", gender:"men",   event:"jump",   label:"ジャンプ",   gLabel:"男子" },
+    { key:"wj", gender:"women", event:"jump",   label:"ジャンプ",   gLabel:"女子" },
+  ];
+  function getPdfUrl(code, genderKey, eventKey, round) {
+    const year = code.slice(0, 2);
+    const base = `https://www.iwwfed-ea.net/classic/${year}/${code}/`;
+    const gStr = genderKey === "men" ? "men" : "women";
+    if (round === "round1") return `${base}${gStr}_${eventKey}_round_1_results.pdf`;
+    return `${base}${gStr}_${eventKey}_overall_results.pdf`;
+  }
   return (
     <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden", marginBottom: 12 }}>
       <div style={{ background: "#0d1e3a", padding: "9px 14px", fontSize: 11, fontWeight: 700, color: C.slalom }}>📄 結果ページ（PDF）</div>
-      <div style={{ padding: 12 }}>
-        {resultsUrl ? (
-          <a href={resultsUrl} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#141d35", border: "1px solid #1e2a4a", borderRadius: 8, padding: "12px 14px", cursor: "pointer" }}>
-              <div>
-                <div style={{ fontSize: 13, color: C.text }}>大会結果ページを開く</div>
-                <div style={{ fontSize: 10, color: "#4a6a9a" }}>種目別のPDFはページ内から選べます</div>
+      <div style={{ padding: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+        {events.map(ev => {
+          const isOpen = open === ev.key;
+          const ecfg = ECFG[ev.event];
+          return (
+            <React.Fragment key={ev.key}>
+              <div onClick={() => setOpen(prev => prev === ev.key ? null : ev.key)} style={{ background: isOpen?"#1a2f55":"#141d35", border: `1px solid ${isOpen?C.slalom:"#1e2a4a"}`, borderRadius: 7, padding: "10px 8px", textAlign: "center", cursor: "pointer" }}>
+                <span style={{ display: "block", fontSize: 9, color: isOpen?C.slalom:"#4a6a9a", marginBottom: 2 }}>{ev.gLabel}</span>
+                <span style={{ display: "block", fontSize: 12, color: isOpen?C.slalom:ecfg.color, fontWeight: 600 }}>{ev.label}</span>
+                <span style={{ fontSize: 9, color: isOpen?C.slalom:"#4a6a9a", marginTop: 3, display: "block" }}>{isOpen?"▲":"▼"}</span>
               </div>
-              <span style={{ fontSize: 9, background: "#1a3060", color: C.slalom, padding: "2px 6px", borderRadius: 3 }}>開く ↗</span>
-            </div>
-          </a>
-        ) : (
-          <div style={{ background: "#141d35", border: "1px solid #1e2a4a", borderRadius: 8, padding: "12px 14px", opacity: 0.4 }}>
-            <div style={{ fontSize: 12, color: C.muted }}>大会コードを設定すると結果ページへのリンクが表示されます</div>
-          </div>
-        )}
+              {isOpen && (
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <div style={{ background: "#0a1020", border: "1px solid #1e3060", borderRadius: 8, padding: 8, display: "flex", flexDirection: "column", gap: 5 }}>
+                    <div style={{ fontSize: 10, color: "#4a6a9a", padding: "2px 6px 6px", borderBottom: "1px solid #1a2540", marginBottom: 2 }}>{ev.gLabel}{ev.label} — 結果を選択</div>
+                    {["round1","overall"].map(round => (
+                      compCode ? (
+                        <a key={round} href={getPdfUrl(compCode, ev.gender, ev.event, round)} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#141d35", border: "1px solid #1e2a4a", borderRadius: 6, padding: "9px 12px", cursor: "pointer" }}>
+                            <div>
+                              <div style={{ fontSize: 12, color: C.text }}>{round==="round1"?"Round 1 結果":"Overall（最終結果）"}</div>
+                              <div style={{ fontSize: 10, color: "#4a6a9a" }}>{round==="round1"?"1本目の全選手スコア":"総合順位・確定スコア"}</div>
+                            </div>
+                            <span style={{ fontSize: 9, background: "#1a3060", color: C.slalom, padding: "2px 6px", borderRadius: 3 }}>PDF</span>
+                          </div>
+                        </a>
+                      ) : (
+                        <div key={round} style={{ background: "#141d35", border: "1px solid #1e2a4a", borderRadius: 6, padding: "9px 12px", opacity: 0.4 }}>
+                          <div style={{ fontSize: 12, color: C.muted }}>{round==="round1"?"Round 1 結果":"Overall（最終結果）"}</div>
+                        </div>
+                      )
+                    ))}
+                  </div>
+                </div>
+              )}
+            </React.Fragment>
+          );
+        })}
       </div>
     </div>
   );

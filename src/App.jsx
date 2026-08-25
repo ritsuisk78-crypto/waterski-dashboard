@@ -1517,8 +1517,8 @@ function SokuhoTab() {
     });
   }, []);
 
-  const iwwfLiveUrl = compCode ? `https://www.iwwfed-ea.org/competition.php?cc=T-${compCode}&page=live` : null;
-  const previewUrl  = inputCode ? `https://www.iwwfed-ea.org/competition.php?cc=T-${inputCode}&page=live` : null;
+    const iwwfLiveUrl = compCode ? `https://www.iwwfed-ea.net/classic/${compCode}/` : null;
+  const previewUrl  = inputCode ? `https://www.iwwfed-ea.net/classic/${inputCode}/` : null;
 
   async function handleSave() {
     setSaving(true);

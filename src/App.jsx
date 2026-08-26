@@ -1105,9 +1105,10 @@ function EventBreakdown({ gender, schoolResults, mode, config, data }) {
                       <td style={{ padding: "10px 8px", textAlign: "center", fontFamily: "monospace", color: ecfg.color }}>
                         {ev.totalScore !== null ? `${e === "jump" ? ev.totalScore.toFixed(1) : ev.totalScore}${ecfg.unit}` : "—"}
                       </td>
-                      <td style={{ padding: "10px 8px", textAlign: "center", fontFamily: "monospace", color: C.accent, fontWeight: 700 }}>
-                                                {ev.totalPts !== null ? `${ev.totalPts.toFixed(1)}pt` : "—"}
+                                            <td style={{ padding: "10px 8px", textAlign: "center", fontFamily: "monospace", color: C.accent, fontWeight: 700 }}>
+                        {ev.totalPts !== null ? `${ev.totalPts.toFixed(1)}pt` : "—"}
                       </td>
+
                       <td style={{ padding: "10px 8px", textAlign: "center" }}>
                         <MiniProgress filled={ev.filledActual} total={ev.total} color={ecfg.color} />
                       </td>

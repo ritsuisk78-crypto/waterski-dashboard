@@ -1502,9 +1502,9 @@ function ResultButtons({ compCode }) {
   );
 }
 function SokuhoTab() {
-  const [compCode, setCompCode] = useState("");
+  const [compUrl, setCompUrl] = useState("");
   const [compName, setCompName] = useState("");
-  const [inputCode, setInputCode] = useState("");
+  const [inputUrl, setInputUrl] = useState("");
   const [inputName, setInputName] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -1512,18 +1512,15 @@ function SokuhoTab() {
 
   useEffect(() => {
     loadCompConfig().then(cfg => {
-      if (cfg) { setCompCode(cfg.code||""); setCompName(cfg.name||""); setInputCode(cfg.code||""); setInputName(cfg.name||""); }
+      if (cfg) { setCompUrl(cfg.url||""); setCompName(cfg.name||""); setInputUrl(cfg.url||""); setInputName(cfg.name||""); }
     });
   }, []);
 
-    const iwwfLiveUrl = compCode ? `https://www.iwwfed-ea.net/classic/${compCode}/` : null;
-  const previewUrl  = inputCode ? `https://www.iwwfed-ea.net/classic/${inputCode}/` : null;
-
   async function handleSave() {
     setSaving(true);
-    const cfg = { code: inputCode.trim().toUpperCase(), name: inputName.trim() };
+    const cfg = { url: inputUrl.trim(), name: inputName.trim() };
     await saveCompConfig(cfg);
-    setCompCode(cfg.code); setCompName(cfg.name);
+    setCompUrl(cfg.url); setCompName(cfg.name);
     setSaving(false); setSaved(true);
     setTimeout(() => { setSaved(false); setSettingsOpen(false); }, 1200);
   }
@@ -1532,25 +1529,20 @@ function SokuhoTab() {
     <div>
       <div style={{ marginBottom: 12 }}>
         <button onClick={() => setSettingsOpen(v => !v)} style={{ width: "100%", background: settingsOpen?"#0d1e3a":C.surface, border: `1px solid ${settingsOpen?C.slalom:C.border}`, borderRadius: settingsOpen?"10px 10px 0 0":10, color: settingsOpen?C.slalom:C.muted, fontSize: 12, fontWeight: 700, padding: "10px 14px", cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}>
-          <span>⚙️ 大会コード設定</span>
-          {compCode && !settingsOpen && <span style={{ fontSize: 10, background: "#1a3060", color: C.slalom, padding: "2px 8px", borderRadius: 10, marginLeft: "auto" }}>T-{compCode}</span>}
+          <span>⚙️ 大会URL設定</span>
+          {compUrl && !settingsOpen && <span style={{ fontSize: 10, background: "#1a3060", color: C.slalom, padding: "2px 8px", borderRadius: 10, marginLeft: "auto" }}>設定済み</span>}
           <span style={{ marginLeft: "auto", fontSize: 10 }}>{settingsOpen?"▲":"▼"}</span>
         </button>
         {settingsOpen && (
           <div style={{ background: C.surface, border: `1px solid #2a3a5a`, borderTop: "none", borderRadius: "0 0 10px 10px", padding: 14 }}>
             <div style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: 11, color: "#4a6a9a", marginBottom: 6 }}>大会コード（IWWF）</div>
-              <div style={{ display: "flex" }}>
-                <span style={{ background: "#0a1020", border: "1px solid #1e2a4a", borderRight: "none", borderRadius: "6px 0 0 6px", color: "#3a4a6a", fontSize: 12, padding: "8px 10px" }}>T-</span>
-                <input type="text" value={inputCode} onChange={e => setInputCode(e.target.value.toUpperCase())} placeholder="26JPN007" maxLength={10} style={{ flex: 1, background: "#0a1020", border: "1px solid #1e2a4a", borderRadius: "0 6px 6px 0", color: C.text, fontSize: 13, padding: "8px 10px", outline: "none", fontFamily: "monospace" }} />
-              </div>
-              <div style={{ marginTop: 6, background: "#060c1a", border: "1px solid #1a2035", borderRadius: 6, padding: "7px 10px", fontSize: 10, color: previewUrl?"#5a8aaa":"#3a4a6a", fontFamily: "monospace", wordBreak: "break-all" }}>
-                {previewUrl || "大会コードを入力するとURLが表示されます"}
-              </div>
+              <div style={{ fontSize: 11, color: "#4a6a9a", marginBottom: 6 }}>ライブスコア／大会ページのURL</div>
+              <input type="text" value={inputUrl} onChange={e => setInputUrl(e.target.value)} placeholder="https://ems.iwwf.sport/Competitions/Details?Id=..." style={{ width: "100%", background: "#0a1020", border: "1px solid #1e2a4a", borderRadius: 6, color: C.text, fontSize: 12, padding: "8px 10px", outline: "none", fontFamily: "monospace", boxSizing: "border-box" }} />
+              <div style={{ marginTop: 6, fontSize: 10, color: "#4a6a9a" }}>IWWF・EMSどちらのページのURLでも貼り付けられます</div>
             </div>
             <div style={{ marginBottom: 14 }}>
               <div style={{ fontSize: 11, color: "#4a6a9a", marginBottom: 6 }}>大会名（表示用）</div>
-              <input type="text" value={inputName} onChange={e => setInputName(e.target.value)} placeholder="例：関東学生春季大会 CS2" style={{ width: "100%", background: "#0a1020", border: "1px solid #1e2a4a", borderRadius: 6, color: C.text, fontSize: 13, padding: "8px 10px", outline: "none", boxSizing: "border-box" }} />
+              <input type="text" value={inputName} onChange={e => setInputName(e.target.value)} placeholder="例：インカレ2026" style={{ width: "100%", background: "#0a1020", border: "1px solid #1e2a4a", borderRadius: 6, color: C.text, fontSize: 13, padding: "8px 10px", outline: "none", boxSizing: "border-box" }} />
             </div>
             <button onClick={handleSave} disabled={saving} style={{ width: "100%", background: saved?C.positive+"22":"#1a3a6a", border: `1px solid ${saved?C.positive:C.slalom}`, borderRadius: 8, color: saved?C.positive:C.slalom, fontSize: 13, fontWeight: 700, padding: "11px", cursor: "pointer" }}>
               {saved?"✓ 保存しました":saving?"保存中...":"保存する"}
@@ -1558,24 +1550,24 @@ function SokuhoTab() {
           </div>
         )}
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", background: "#0a1020", borderRadius: 8, marginBottom: 12, fontSize: 11, color: compCode?"#5abf8a":"#4a5580" }}>
-        <span style={{ width: 7, height: 7, borderRadius: "50%", background: compCode?"#4aaa7a":"#5a5a6a", display: "inline-block", flexShrink: 0 }} />
-        <span>{compCode?`${compName||"大会"}（T-${compCode}）`:"大会コード未設定 — ⚙️から設定してください"}</span>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", background: "#0a1020", borderRadius: 8, marginBottom: 12, fontSize: 11, color: compUrl?"#5abf8a":"#4a5580" }}>
+        <span style={{ width: 7, height: 7, borderRadius: "50%", background: compUrl?"#4aaa7a":"#5a5a6a", display: "inline-block", flexShrink: 0 }} />
+        <span>{compUrl?`${compName||"大会"}`:"URL未設定 — ⚙️から設定してください"}</span>
       </div>
       <div style={{ background: C.surface, border: "1px solid #1e3a6e", borderRadius: 12, overflow: "hidden", marginBottom: 12 }}>
         <div style={{ background: "#0d2045", padding: "9px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 700, color: C.slalom }}>
-            <span style={{ width: 7, height: 7, borderRadius: "50%", background: compCode?"#ff4444":"#5a5a6a", display: "inline-block" }} />
-            IWWF ライブスコア
+            <span style={{ width: 7, height: 7, borderRadius: "50%", background: compUrl?"#ff4444":"#5a5a6a", display: "inline-block" }} />
+            ライブスコア／大会結果
           </div>
-          {iwwfLiveUrl && <a href={iwwfLiveUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, color: "#4a6a9a", textDecoration: "none", border: "1px solid #1e3060", borderRadius: 4, padding: "2px 7px" }}>別窓 ↗</a>}
+          {compUrl && <a href={compUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, color: "#4a6a9a", textDecoration: "none", border: "1px solid #1e3060", borderRadius: 4, padding: "2px 7px" }}>別窓 ↗</a>}
         </div>
-        {compCode ? (
-          <iframe src={iwwfLiveUrl} style={{ width: "100%", height: 300, border: "none", background: "#fff" }} title="IWWF Live Score" sandbox="allow-scripts allow-same-origin" />
+        {compUrl ? (
+          <iframe src={compUrl} style={{ width: "100%", height: 500, border: "none", background: "#fff" }} title="大会ページ" sandbox="allow-scripts allow-same-origin" />
         ) : (
           <div style={{ padding: "32px 16px", textAlign: "center" }}>
             <div style={{ fontSize: 28, marginBottom: 10 }}>🏁</div>
-            <div style={{ fontSize: 12, color: "#3a4a6a", lineHeight: 1.6 }}>大会コードを設定すると<br />ライブスコアが表示されます</div>
+            <div style={{ fontSize: 12, color: "#3a4a6a", lineHeight: 1.6 }}>大会のURLを設定すると<br />ここに表示されます</div>
           </div>
         )}
       </div>
@@ -1596,7 +1588,6 @@ function SokuhoTab() {
           </div>
         </div>
       </a>
-      <ResultButtons compCode={compCode} />
       <style>{`@keyframes liveblink{0%,100%{opacity:1}50%{opacity:0.15}}`}</style>
     </div>
   );

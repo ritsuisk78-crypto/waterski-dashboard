@@ -1535,7 +1535,7 @@ export default function App() {
       <div style={{ position: "sticky", top: 0, zIndex: 100, background: C.bg + "ee", backdropFilter: "blur(12px)", borderBottom: `1px solid ${C.border}` }}>
         <div style={{ maxWidth: 900, margin: "0 auto", padding: "10px 16px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <img
+            
                          <img
               src="/kwst-logo.png"
               alt="KWST"

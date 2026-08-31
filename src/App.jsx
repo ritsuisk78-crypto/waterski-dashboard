@@ -103,14 +103,14 @@ async function loadAllScores(initialData) {
   } catch(e) { console.error("loadAllScores error", e); return initialData; }
 }
 
-async function saveSkier(gender, event, school, idx, skier) {
+async function saveSkier(gender, event, school, idx, field, value) {
   try {
     await sbFetch("scores?on_conflict=gender,event,school,skier_index", {
       method: "POST",
       headers: { "Prefer": "resolution=merge-duplicates" },
       body: JSON.stringify({
         gender, event, school, skier_index: idx,
-        name: skier.name, planned: skier.planned, actual: skier.actual,
+        [field]: value,
         updated_at: new Date().toISOString(),
       }),
     });
@@ -827,10 +827,9 @@ function InputTab({ config, data, setData, gender, saveSkierDebounced }) {
       const updated = prev[gender][event][school].map((sk, i) =>
         i === idx ? { ...sk, [field]: val } : sk
       );
-      const newSkier = updated[idx];
-      saveSkierDebounced(gender, event, school, idx, newSkier);
       return { ...prev, [gender]: { ...prev[gender], [event]: { ...prev[gender][event], [school]: updated } } };
     });
+    saveSkierDebounced(gender, event, school, idx, field, val);
   }, [gender, event, school, setData, saveSkierDebounced]);
 
   return (
@@ -1482,12 +1481,12 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  const saveSkierDebounced = useCallback((gender, event, school, idx, skier) => {
-    const key = `${gender}-${event}-${school}-${idx}`;
+  const saveSkierDebounced = useCallback((gender, event, school, idx, field, value) => {
+    const key = `${gender}-${event}-${school}-${idx}-${field}`;
     clearTimeout(saveTimers.current[key]);
     setSyncing(true);
     saveTimers.current[key] = setTimeout(async () => {
-      await saveSkier(gender, event, school, idx, skier);
+      await saveSkier(gender, event, school, idx, field, value);
       setSyncing(false);
     }, 800);
   }, []);

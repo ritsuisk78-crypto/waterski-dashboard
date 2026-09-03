@@ -1399,14 +1399,18 @@ function StartlistTab() {
                     style={{ position: "absolute", top: 4, right: 4, background: C.negative + "cc", border: "none", borderRadius: "50%", width: 22, height: 22, color: "#fff", fontSize: 12, cursor: "pointer", lineHeight: 1 }}
                   >✕</button>
                   {editingIndex === i ? (
-                    <input
-                      autoFocus
-                      value={editTitleValue}
-                      onChange={e => setEditTitleValue(e.target.value)}
-                      onBlur={() => handleTitleSave(i)}
-                      onKeyDown={e => { if (e.key === "Enter") e.target.blur(); }}
-                      style={{ width: "100%", fontSize: 9, marginTop: 4, textAlign: "center", background: C.bg, border: `1px solid ${C.jump}66`, borderRadius: 4, color: C.text, padding: "2px 4px", boxSizing: "border-box", outline: "none" }}
-                    />
+                    <div style={{ display: "flex", gap: 2, marginTop: 4 }}>
+                      <input
+                        autoFocus
+                        value={editTitleValue}
+                        onChange={e => setEditTitleValue(e.target.value)}
+                        style={{ flex: 1, minWidth: 0, fontSize: 9, background: C.bg, border: `1px solid ${C.jump}66`, borderRadius: 4, color: C.text, padding: "2px 4px", boxSizing: "border-box", outline: "none" }}
+                      />
+                      <button
+                        onClick={() => handleTitleSave(i)}
+                        style={{ flexShrink: 0, background: C.jump + "33", border: `1px solid ${C.jump}66`, borderRadius: 4, color: C.jump, fontSize: 10, fontWeight: 700, padding: "2px 6px", cursor: "pointer" }}
+                      >✓</button>
+                    </div>
                   ) : (
                     <div
                       onClick={() => { setEditingIndex(i); setEditTitleValue(p.title || ""); }}

@@ -1297,6 +1297,8 @@ function StartlistTab() {
   const [newTitle, setNewTitle] = useState("");
   const [viewerPhoto, setViewerPhoto] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [editingIndex, setEditingIndex] = useState(null);
+  const [editTitleValue, setEditTitleValue] = useState("");
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -1324,6 +1326,13 @@ function StartlistTab() {
     if (!window.confirm("この写真を削除しますか？")) return;
     const updated = await deleteStartlistPhoto(path);
     if (updated) setPhotos(updated);
+  }
+
+  async function handleTitleSave(i) {
+    const updated = photos.map((p, idx) => idx === i ? { ...p, title: editTitleValue } : p);
+    setPhotos(updated);
+    await saveStartlistPhotos(updated);
+    setEditingIndex(null);
   }
 
   return (
@@ -1389,9 +1398,21 @@ function StartlistTab() {
                     onClick={() => handleDelete(p.path)}
                     style={{ position: "absolute", top: 4, right: 4, background: C.negative + "cc", border: "none", borderRadius: "50%", width: 22, height: 22, color: "#fff", fontSize: 12, cursor: "pointer", lineHeight: 1 }}
                   >✕</button>
-                  {p.title && (
-                    <div style={{ fontSize: 9, color: C.muted, marginTop: 4, textAlign: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {p.title}
+                  {editingIndex === i ? (
+                    <input
+                      autoFocus
+                      value={editTitleValue}
+                      onChange={e => setEditTitleValue(e.target.value)}
+                      onBlur={() => handleTitleSave(i)}
+                      onKeyDown={e => { if (e.key === "Enter") handleTitleSave(i); }}
+                      style={{ width: "100%", fontSize: 9, marginTop: 4, textAlign: "center", background: C.bg, border: `1px solid ${C.jump}66`, borderRadius: 4, color: C.text, padding: "2px 4px", boxSizing: "border-box", outline: "none" }}
+                    />
+                  ) : (
+                    <div
+                      onClick={() => { setEditingIndex(i); setEditTitleValue(p.title || ""); }}
+                      style={{ fontSize: 9, color: p.title ? C.muted : C.muted + "88", marginTop: 4, textAlign: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer" }}
+                    >
+                      {p.title || "＋タイトル追加"}
                     </div>
                   )}
                 </div>

@@ -1404,7 +1404,7 @@ function StartlistTab() {
                       value={editTitleValue}
                       onChange={e => setEditTitleValue(e.target.value)}
                       onBlur={() => handleTitleSave(i)}
-                      onKeyDown={e => { if (e.key === "Enter") handleTitleSave(i); }}
+                      onKeyDown={e => { if (e.key === "Enter") e.target.blur(); }}
                       style={{ width: "100%", fontSize: 9, marginTop: 4, textAlign: "center", background: C.bg, border: `1px solid ${C.jump}66`, borderRadius: 4, color: C.text, padding: "2px 4px", boxSizing: "border-box", outline: "none" }}
                     />
                   ) : (

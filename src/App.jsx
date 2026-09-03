@@ -1294,7 +1294,6 @@ function StartlistTab() {
   const [inputUrl, setInputUrl] = useState("");
   const [photos, setPhotos] = useState([]);
   const [uploading, setUploading] = useState(false);
-  const [newTitle, setNewTitle] = useState("");
   const [viewerPhoto, setViewerPhoto] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [editingIndex, setEditingIndex] = useState(null);
@@ -1315,10 +1314,9 @@ function StartlistTab() {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploading(true);
-    const updated = await uploadStartlistPhoto(file, newTitle);
+    const updated = await uploadStartlistPhoto(file, "");
     if (updated) setPhotos(updated);
     setUploading(false);
-    setNewTitle("");
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
@@ -1366,13 +1364,6 @@ function StartlistTab() {
       <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
         <div style={{ background: "#0d1e3a", padding: "9px 14px", fontSize: 11, fontWeight: 700, color: C.jump }}>📷 配布された出走リスト（写真）</div>
         <div style={{ padding: 14 }}>
-          <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-            <input
-              type="text" value={newTitle} onChange={e => setNewTitle(e.target.value)}
-              placeholder="タイトル（例：男子スラローム Round1）"
-              style={{ flex: 1, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontSize: 12, padding: "8px 10px", outline: "none" }}
-            />
-          </div>
           <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileSelect} style={{ display: "none" }} />
           <button
             onClick={() => fileInputRef.current?.click()}
@@ -1399,24 +1390,32 @@ function StartlistTab() {
                     style={{ position: "absolute", top: 4, right: 4, background: C.negative + "cc", border: "none", borderRadius: "50%", width: 22, height: 22, color: "#fff", fontSize: 12, cursor: "pointer", lineHeight: 1 }}
                   >✕</button>
                   {editingIndex === i ? (
-                    <div style={{ display: "flex", gap: 2, marginTop: 4 }}>
+                    <div style={{ display: "flex", gap: 4, marginTop: 6 }}>
                       <input
                         autoFocus
                         value={editTitleValue}
                         onChange={e => setEditTitleValue(e.target.value)}
-                        style={{ flex: 1, minWidth: 0, fontSize: 9, background: C.bg, border: `1px solid ${C.jump}66`, borderRadius: 4, color: C.text, padding: "2px 4px", boxSizing: "border-box", outline: "none" }}
+                        placeholder="タイトルを入力"
+                        style={{ flex: 1, minWidth: 0, fontSize: 11, background: C.bg, border: `1px solid ${C.jump}`, borderRadius: 6, color: C.text, padding: "6px 8px", boxSizing: "border-box", outline: "none" }}
                       />
                       <button
                         onClick={() => handleTitleSave(i)}
-                        style={{ flexShrink: 0, background: C.jump + "33", border: `1px solid ${C.jump}66`, borderRadius: 4, color: C.jump, fontSize: 10, fontWeight: 700, padding: "2px 6px", cursor: "pointer" }}
+                        style={{ flexShrink: 0, background: C.jump, border: "none", borderRadius: 6, color: C.bg, fontSize: 13, fontWeight: 900, padding: "6px 10px", cursor: "pointer" }}
                       >✓</button>
                     </div>
                   ) : (
                     <div
                       onClick={() => { setEditingIndex(i); setEditTitleValue(p.title || ""); }}
-                      style={{ fontSize: 9, color: p.title ? C.muted : C.muted + "88", marginTop: 4, textAlign: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer" }}
+                      style={{
+                        marginTop: 6, fontSize: 11, fontWeight: p.title ? 700 : 400,
+                        color: p.title ? C.text : C.jump,
+                        background: p.title ? C.surface2 : C.jump + "18",
+                        border: `1px solid ${p.title ? C.border : C.jump + "66"}`,
+                        borderRadius: 6, padding: "6px 8px",
+                        textAlign: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer",
+                      }}
                     >
-                      {p.title || "＋タイトル追加"}
+                      {p.title || "✏️ タイトルを追加"}
                     </div>
                   )}
                 </div>

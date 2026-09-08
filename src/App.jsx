@@ -1441,6 +1441,87 @@ function CombinedPlayerPopup({ school, event, mode, config, data, onClose }) {
   );
 }
 
+function evTopList(evResult) {
+  return evResult.list
+    .filter(s => evResult.adopted.has(s.listIdx))
+    .sort((a, b) => b.pts - a.pts);
+}
+
+function CombinedDiffDetailPopup({ event, keioEv, otherEv, otherLabel, config, onClose }) {
+  const ecfg = ECFG[event];
+  const dPts = keioEv.totalPts !== null && otherEv.totalPts !== null ? keioEv.totalPts - otherEv.totalPts : null;
+  const menEffPin   = event === "jump" ? Math.max(0, parseFloat(config.men.pin.jump)   - parseFloat(config.men.handicap))   : parseFloat(config.men.pin[event]);
+  const womenEffPin = event === "jump" ? Math.max(0, parseFloat(config.women.pin.jump) - parseFloat(config.women.handicap)) : parseFloat(config.women.pin[event]);
+
+  const keioTop  = evTopList(keioEv);
+  const otherTop = evTopList(otherEv);
+
+  const MiniRoster = ({ title, list, color }) => (
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ fontSize: 10, color, fontWeight: 700, marginBottom: 6 }}>{title}</div>
+      {list.length === 0 && <div style={{ fontSize: 11, color: C.muted }}>—</div>}
+      {list.map((s, i) => (
+        <div key={i} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, marginBottom: 4, overflow: "hidden" }}>
+          <span style={{ flexShrink: 0 }}>{s.gender === "men" ? "👨" : "👩"}</span>
+          <span style={{ flex: 1, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name || "選手"}</span>
+          <span style={{ flexShrink: 0, fontFamily: "monospace", color: C.accent }}>{s.pts.toFixed(1)}</span>
+        </div>
+      ))}
+    </div>
+  );
+
+  return (
+    <div
+      style={{ position: "fixed", inset: 0, zIndex: 320, background: C.overlay, backdropFilter: "blur(6px)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}
+      onClick={onClose}
+    >
+      <div onClick={e => e.stopPropagation()} style={{
+        background: C.surface, border: `1px solid ${ecfg.color}44`,
+        borderRadius: "16px 16px 0 0", width: "100%", maxWidth: 600, padding: "20px 16px 40px",
+      }}>
+        <div style={{ width: 36, height: 4, background: C.border, borderRadius: 2, margin: "0 auto 16px" }} />
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: ecfg.color }}>{ecfg.icon} {ecfg.label}</div>
+            <div style={{ fontSize: 12, color: C.muted }}>慶應 vs {otherLabel}</div>
+          </div>
+          <button onClick={onClose} style={{ marginLeft: "auto", background: "none", border: "none", color: C.muted, fontSize: 22, cursor: "pointer" }}>✕</button>
+        </div>
+
+        <div style={{ textAlign: "center", marginBottom: 14 }}>
+          <div style={{ fontSize: 10, color: C.muted, marginBottom: 2 }}>換算点差</div>
+          <div style={{ fontSize: 28, fontWeight: 900, fontFamily: "monospace", color: diffColor(dPts) }}>{signStr(dPts, "pt")}</div>
+        </div>
+
+        {dPts !== null && (
+          <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+            <div style={{ flex: 1, background: C.men + "11", border: `1px solid ${C.men}44`, borderRadius: 10, padding: "10px 12px", textAlign: "center" }}>
+              <div style={{ fontSize: 10, color: C.men, marginBottom: 4 }}>👨 男子の{ecfg.label}なら</div>
+              <div style={{ fontSize: 15, fontWeight: 700, fontFamily: "monospace", color: C.men }}>
+                {dPts >= 0 ? "+" : "-"}{ptToUnit(dPts, menEffPin)}{ecfg.unit}
+              </div>
+            </div>
+            <div style={{ flex: 1, background: C.women + "11", border: `1px solid ${C.women}44`, borderRadius: 10, padding: "10px 12px", textAlign: "center" }}>
+              <div style={{ fontSize: 10, color: C.women, marginBottom: 4 }}>👩 女子の{ecfg.label}なら</div>
+              <div style={{ fontSize: 15, fontWeight: 700, fontFamily: "monospace", color: C.women }}>
+                {dPts >= 0 ? "+" : "-"}{ptToUnit(dPts, womenEffPin)}{ecfg.unit}
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div style={{ fontSize: 10, color: C.muted, marginBottom: 8 }}>採用{COMBINED_TOP_N}人の内訳</div>
+        <div style={{ display: "flex", gap: 14, background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px" }}>
+          <MiniRoster title={`慶應`} list={keioTop} color={C.keio} />
+          <div style={{ width: 1, background: C.border }} />
+          <MiniRoster title={otherLabel} list={otherTop} color={C.muted} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 function CombinedDiffTables({ schoolResults, config, completedEvents, data, mode }) {
   const keio = schoolResults.find(r => r.school === "慶應");
   const others = schoolResults.filter(r => r.school !== "慶應");
@@ -1475,7 +1556,9 @@ function CombinedDiffTables({ schoolResults, config, completedEvents, data, mode
                     const kEv = keio.result.ev[e], rEv = r.result.ev[e];
                     const dEv = kEv.totalPts !== null && rEv.totalPts !== null ? kEv.totalPts - rEv.totalPts : null;
                     return (
-                      <td key={e} style={{ padding: "6px 4px", textAlign: "center", fontFamily: "monospace", fontSize: 11, color: dEv === null ? C.muted : ECFG[e].color, whiteSpace: "nowrap" }}>
+                      <td key={e}
+                        onClick={() => dEv !== null && setDiffPopup({ event: e, other: r.school, isPlan: false })}
+                        style={{ padding: "6px 4px", textAlign: "center", fontFamily: "monospace", fontSize: 11, color: dEv === null ? C.muted : ECFG[e].color, whiteSpace: "nowrap", cursor: dEv !== null ? "pointer" : "default" }}>
                         {dEv === null ? "—" : signStr(dEv)}
                       </td>
                     );
@@ -1487,17 +1570,16 @@ function CombinedDiffTables({ schoolResults, config, completedEvents, data, mode
               const dPlan = keio.result.grandTotal !== null && keioPlannedResult.grandTotal !== null
                 ? keio.result.grandTotal - keioPlannedResult.grandTotal : null;
               return (
-                <tr
-                  onClick={() => setDiffPopup({ school: "慶應", event: "slalom" })}
-                  style={{ background: C.accent + "0d", cursor: "pointer" }}
-                >
-                  <td style={{ padding: "8px 10px", fontSize: 11, color: C.muted }}>慶應 想定差 <span style={{ fontSize: 10, color: C.muted }}>▶</span></td>
+                <tr style={{ background: C.accent + "0d" }}>
+                  <td style={{ padding: "8px 10px", fontSize: 11, color: C.muted }}>慶應 想定差</td>
                   <td style={{ padding: "8px 8px", textAlign: "center", fontFamily: "monospace", fontWeight: 700, color: diffColor(dPlan) }}>{signStr(dPlan, "pt")}</td>
                   {EVENTS.map(e => {
                     const kEv = keio.result.ev[e], pEv = keioPlannedResult.ev[e];
                     const dEv = kEv.totalPts !== null && pEv.totalPts !== null ? kEv.totalPts - pEv.totalPts : null;
                     return (
-                      <td key={e} style={{ padding: "6px 4px", textAlign: "center", fontFamily: "monospace", fontSize: 11, color: dEv === null ? C.muted : ECFG[e].color, whiteSpace: "nowrap" }}>
+                      <td key={e}
+                        onClick={() => dEv !== null && setDiffPopup({ event: e, other: null, isPlan: true })}
+                        style={{ padding: "6px 4px", textAlign: "center", fontFamily: "monospace", fontSize: 11, color: dEv === null ? C.muted : ECFG[e].color, whiteSpace: "nowrap", cursor: dEv !== null ? "pointer" : "default" }}>
                         {dEv === null ? "—" : signStr(dEv)}
                       </td>
                     );
@@ -1534,7 +1616,7 @@ function CombinedDiffTables({ schoolResults, config, completedEvents, data, mode
                   const ptDiff = kEv.totalPts !== null && rEv.totalPts !== null ? kEv.totalPts - rEv.totalPts : null;
                   return (
                     <tr key={r.school} style={{ borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}
-                      onClick={() => setDiffPopup({ school: r.school, event: e })}>
+                      onClick={() => setDiffPopup({ event: e, other: r.school, isPlan: false })}>
                       <td style={{ padding: "8px 10px", fontWeight: 700, color: C.text }}>{r.school} <span style={{ fontSize: 10, color: C.muted }}>▶</span></td>
                       <td style={{ padding: "6px 8px", textAlign: "center", fontFamily: "monospace", fontSize: 13, fontWeight: 700, color: diffColor(ptDiff) }}>{signStr(ptDiff, "pt")}</td>
                       <td style={{ padding: "6px 8px", textAlign: "center", fontSize: 11 }}>
@@ -1545,7 +1627,7 @@ function CombinedDiffTables({ schoolResults, config, completedEvents, data, mode
                   );
                 })}
                 <tr
-                  onClick={() => setDiffPopup({ school: "慶應", event: e })}
+                  onClick={() => setDiffPopup({ event: e, other: null, isPlan: true })}
                   style={{ background: ecfg.color + "0d", cursor: "pointer" }}
                 >
                   <td style={{ padding: "8px 10px", fontSize: 11, color: C.muted }}>慶應 想定差 <span style={{ fontSize: 10, color: C.muted }}>▶</span></td>
@@ -1560,12 +1642,12 @@ function CombinedDiffTables({ schoolResults, config, completedEvents, data, mode
     </div>
 
       {diffPopup && (
-        <CombinedPlayerPopup
-          school={diffPopup.school}
-          event={diffPopup.event || "slalom"}
-          mode={diffPopup.school === "慶應" ? "B" : (mode || "B")}
+        <CombinedDiffDetailPopup
+          event={diffPopup.event}
+          keioEv={keio.result.ev[diffPopup.event]}
+          otherEv={diffPopup.isPlan ? keioPlannedResult.ev[diffPopup.event] : schoolResults.find(r => r.school === diffPopup.other).result.ev[diffPopup.event]}
+          otherLabel={diffPopup.isPlan ? "慶應（想定）" : diffPopup.other}
           config={config}
-          data={data}
           onClose={() => setDiffPopup(null)}
         />
       )}

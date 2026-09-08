@@ -1512,63 +1512,6 @@ function CombinedDiffDetailPopup({ event, dPts, rosterResult, rosterLabel, confi
   );
 }
 
-function CombinedTotalDiffPopup({ dTotal, otherLabel, config, onClose }) {
-  return (
-    <div
-      style={{ position: "fixed", inset: 0, zIndex: 320, background: C.overlay, backdropFilter: "blur(6px)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}
-      onClick={onClose}
-    >
-      <div onClick={e => e.stopPropagation()} style={{
-        background: C.surface, border: `1px solid ${C.accent}44`,
-        borderRadius: "16px 16px 0 0", width: "100%", maxWidth: 600, padding: "20px 16px 40px",
-      }}>
-        <div style={{ width: 36, height: 4, background: C.border, borderRadius: 2, margin: "0 auto 16px" }} />
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-          <div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: C.accent }}>🤝 男女総合</div>
-            <div style={{ fontSize: 12, color: C.muted }}>慶應 vs {otherLabel}</div>
-          </div>
-          <button onClick={onClose} style={{ marginLeft: "auto", background: "none", border: "none", color: C.muted, fontSize: 22, cursor: "pointer" }}>✕</button>
-        </div>
-
-        <div style={{ textAlign: "center", marginBottom: 16 }}>
-          <div style={{ fontSize: 10, color: C.muted, marginBottom: 2 }}>男女総合　換算点差</div>
-          <div style={{ fontSize: 28, fontWeight: 900, fontFamily: "monospace", color: diffColor(dTotal) }}>{signStr(dTotal, "pt")}</div>
-        </div>
-
-        <div style={{ fontSize: 11, color: C.muted, marginBottom: 10 }}>もしこの差がすべて…</div>
-        <div style={{ display: "grid", gap: 8 }}>
-          {EVENTS.map(e => {
-            const ecfg = ECFG[e];
-            const menEffPin   = e === "jump" ? Math.max(0, parseFloat(config.men.pin.jump)   - parseFloat(config.men.handicap))   : parseFloat(config.men.pin[e]);
-            const womenEffPin = e === "jump" ? Math.max(0, parseFloat(config.women.pin.jump) - parseFloat(config.women.handicap)) : parseFloat(config.women.pin[e]);
-            const sign = dTotal >= 0 ? "+" : "-";
-            return (
-              <div key={e} style={{
-                display: "flex", alignItems: "center", gap: 10,
-                background: ecfg.color + "0d", border: `1px solid ${ecfg.color}33`, borderRadius: 10,
-                padding: "10px 12px",
-              }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: ecfg.color, width: 76, flexShrink: 0 }}>{ecfg.icon} {ecfg.label}なら</div>
-                <div style={{ flex: 1, display: "flex", gap: 10, justifyContent: "flex-end" }}>
-                  <div style={{ textAlign: "center" }}>
-                    <div style={{ fontSize: 9, color: C.men }}>👨男子</div>
-                    <div style={{ fontSize: 14, fontWeight: 700, fontFamily: "monospace", color: C.men }}>{sign}{ptToUnit(dTotal, menEffPin)}{ecfg.unit}</div>
-                  </div>
-                  <div style={{ textAlign: "center" }}>
-                    <div style={{ fontSize: 9, color: C.women }}>👩女子</div>
-                    <div style={{ fontSize: 14, fontWeight: 700, fontFamily: "monospace", color: C.women }}>{sign}{ptToUnit(dTotal, womenEffPin)}{ecfg.unit}</div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 const EVENT_SHORT_LABEL = { slalom: "S", trick: "T", jump: "J" };
 
 function eventEffPin(event, gender, config) {
@@ -1578,12 +1521,12 @@ function eventEffPin(event, gender, config) {
 }
 
 function InlineGenderConv({ dEv, event, config }) {
-  if (dEv === null) return null;
+  if (dEv === null) return <span style={{ color: C.muted, fontSize: 11 }}>—</span>;
   const sign = dEv >= 0 ? "+" : "-";
   const menU   = ptToUnit(dEv, eventEffPin(event, "men", config));
   const womenU = ptToUnit(dEv, eventEffPin(event, "women", config));
   return (
-    <div style={{ marginTop: 3, lineHeight: 1.35 }}>
+    <div style={{ lineHeight: 1.35 }}>
       <div style={{ fontSize: 8.5, color: C.men }}>男{sign}{menU}</div>
       <div style={{ fontSize: 8.5, color: C.women }}>女{sign}{womenU}</div>
     </div>
@@ -1594,7 +1537,6 @@ function CombinedDiffTables({ schoolResults, config, completedEvents, data, mode
   const keio = schoolResults.find(r => r.school === "慶應");
   const others = schoolResults.filter(r => r.school !== "慶應");
   const [diffPopup, setDiffPopup] = useState(null);
-  const [totalPopup, setTotalPopup] = useState(null);
   const keioPlannedResult = calcCombinedSchoolResult("慶應", config, "P", data);
 
   return (
@@ -1620,23 +1562,14 @@ function CombinedDiffTables({ schoolResults, config, completedEvents, data, mode
               return (
                 <tr key={r.school} style={{ borderBottom: `1px solid ${C.border}` }}>
                   <td style={{ padding: "8px 10px", fontWeight: 700, color: C.text }}>{r.school}</td>
-                  <td
-                    onClick={() => d !== null && setTotalPopup({ dTotal: d, otherLabel: r.school })}
-                    style={{ padding: "8px 8px", textAlign: "center", fontFamily: "monospace", fontWeight: 700, color: diffColor(d), cursor: d !== null ? "pointer" : "default" }}>
+                  <td style={{ padding: "8px 8px", textAlign: "center", fontFamily: "monospace", fontWeight: 700, color: diffColor(d) }}>
                     {signStr(d, "pt")}
                   </td>
-                  {EVENTS.map(e => {
-                    const kEv = keio.result.ev[e], rEv = r.result.ev[e];
-                    const dEv = kEv.totalPts !== null && rEv.totalPts !== null ? kEv.totalPts - rEv.totalPts : null;
-                    return (
-                      <td key={e}
-                        onClick={() => dEv !== null && setDiffPopup({ event: e, dPts: dEv, rosterResult: rEv, rosterLabel: r.school })}
-                        style={{ padding: "6px 3px", textAlign: "center", fontFamily: "monospace", fontSize: 11, color: dEv === null ? C.muted : ECFG[e].color, whiteSpace: "nowrap", cursor: dEv !== null ? "pointer" : "default" }}>
-                        {dEv === null ? "—" : signStr(dEv)}
-                        <InlineGenderConv dEv={dEv} event={e} config={config} />
-                      </td>
-                    );
-                  })}
+                  {EVENTS.map(e => (
+                    <td key={e} style={{ padding: "6px 3px", textAlign: "center", fontFamily: "monospace", whiteSpace: "nowrap" }}>
+                      <InlineGenderConv dEv={d} event={e} config={config} />
+                    </td>
+                  ))}
                 </tr>
               );
             })}
@@ -1646,23 +1579,14 @@ function CombinedDiffTables({ schoolResults, config, completedEvents, data, mode
               return (
                 <tr style={{ background: C.accent + "0d" }}>
                   <td style={{ padding: "8px 10px", fontSize: 11, color: C.muted }}>慶應 想定差</td>
-                  <td
-                    onClick={() => dPlan !== null && setTotalPopup({ dTotal: dPlan, otherLabel: "慶應（想定）" })}
-                    style={{ padding: "8px 8px", textAlign: "center", fontFamily: "monospace", fontWeight: 700, color: diffColor(dPlan), cursor: dPlan !== null ? "pointer" : "default" }}>
+                  <td style={{ padding: "8px 8px", textAlign: "center", fontFamily: "monospace", fontWeight: 700, color: diffColor(dPlan) }}>
                     {signStr(dPlan, "pt")}
                   </td>
-                  {EVENTS.map(e => {
-                    const kEv = keio.result.ev[e], pEv = keioPlannedResult.ev[e];
-                    const dEv = kEv.totalPts !== null && pEv.totalPts !== null ? kEv.totalPts - pEv.totalPts : null;
-                    return (
-                      <td key={e}
-                        onClick={() => dEv !== null && setDiffPopup({ event: e, dPts: dEv, rosterResult: kEv, rosterLabel: "慶應" })}
-                        style={{ padding: "6px 3px", textAlign: "center", fontFamily: "monospace", fontSize: 11, color: dEv === null ? C.muted : ECFG[e].color, whiteSpace: "nowrap", cursor: dEv !== null ? "pointer" : "default" }}>
-                        {dEv === null ? "—" : signStr(dEv)}
-                        <InlineGenderConv dEv={dEv} event={e} config={config} />
-                      </td>
-                    );
-                  })}
+                  {EVENTS.map(e => (
+                    <td key={e} style={{ padding: "6px 3px", textAlign: "center", fontFamily: "monospace", whiteSpace: "nowrap" }}>
+                      <InlineGenderConv dEv={dPlan} event={e} config={config} />
+                    </td>
+                  ))}
                 </tr>
               );
             })()}
@@ -1755,15 +1679,6 @@ function CombinedDiffTables({ schoolResults, config, completedEvents, data, mode
           rosterLabel={diffPopup.rosterLabel}
           config={config}
           onClose={() => setDiffPopup(null)}
-        />
-      )}
-
-      {totalPopup && (
-        <CombinedTotalDiffPopup
-          dTotal={totalPopup.dTotal}
-          otherLabel={totalPopup.otherLabel}
-          config={config}
-          onClose={() => setTotalPopup(null)}
         />
       )}
     </>

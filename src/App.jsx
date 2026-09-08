@@ -1041,7 +1041,7 @@ function DiffTables({ gender, schoolResults, config, completedEvents, data, mode
                   onClick={() => setDiffPopup({ school: "慶應", event: "slalom" })}
                   style={{ background: C.accent + "0d", cursor: "pointer" }}
                 >
-                  <td style={{ padding: "8px 10px", fontSize: 13, color: C.muted }}>慶應 想定差 <span style={{ fontSize: 12, color: C.muted }}>▶</span></td>
+                  <td style={{ padding: "8px 10px", fontSize: 13, color: C.muted }}>想定差 <span style={{ fontSize: 12, color: C.muted }}>▶</span></td>
                   <td style={{ padding: "8px 8px", textAlign: "center", fontFamily: "monospace", fontWeight: 700, color: diffColor(dPlan) }}>{signStr(dPlan, "pt")}</td>
                   {EVENTS.map(e => {
                     const effPin = e === "jump" ? Math.max(0, parseFloat(cfg.pin[e]) - parseFloat(cfg.handicap)) : parseFloat(cfg.pin[e]);
@@ -1102,7 +1102,7 @@ function DiffTables({ gender, schoolResults, config, completedEvents, data, mode
                   onClick={() => setDiffPopup({ school: "慶應", event: e })}
                   style={{ background: ecfg.color + "0d", cursor: "pointer" }}
                 >
-                  <td style={{ padding: "8px 10px", fontSize: 13, color: C.muted }}>慶應 想定差 <span style={{ fontSize: 12, color: C.muted }}>▶</span></td>
+                  <td style={{ padding: "8px 10px", fontSize: 13, color: C.muted }}>想定差 <span style={{ fontSize: 12, color: C.muted }}>▶</span></td>
                   <td style={{ padding: "6px 8px", textAlign: "center" }}>
                     <div style={{ fontFamily: "monospace", fontSize: 14, fontWeight: 700, color: diffColor(dScore) }}>{dScore !== null ? `${dScore >= 0 ? "+" : ""}${dScore}${ecfg.unit}` : "—"}</div>
                     <div style={{ fontFamily: "monospace", fontSize: 13, color: diffColor(dPts), marginTop: 2 }}>{signStr(dPts, "pt")}</div>
@@ -1187,7 +1187,7 @@ function EventBreakdown({ gender, schoolResults, mode, config, data }) {
                 })}
                 <tr onClick={() => setPopup({ school: "慶應", event: e })} style={{ background: C.accent + "0d", cursor: "pointer" }}>
                   <td style={{ padding: "8px 10px", fontSize: 13, color: C.muted }}>
-                    慶應 想定差 <span style={{ fontSize: 12, color: C.muted }}>▶</span>
+                    想定差 <span style={{ fontSize: 12, color: C.muted }}>▶</span>
                   </td>
                   <td style={{ padding: "8px 8px", textAlign: "center", fontSize: 12, color: C.muted, fontFamily: "monospace" }}>
                     {keioPlanned.totalScore !== null ? `想定${e === "jump" ? keioPlanned.totalScore.toFixed(1) : keioPlanned.totalScore}${ecfg.unit}` : "—"}
@@ -1308,12 +1308,12 @@ function ResultTab({ config, data, gender }) {
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(64px, 1fr))", gap: 8, marginBottom: 14 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(72px, 1fr))", gap: 6, marginBottom: 14 }}>
         {schoolResults.map(({ school, result }) => (
-          <div key={school} style={{ background: school === "慶應" ? C.keio + "22" : C.surface, border: `1px solid ${school === "慶應" ? C.keio : C.border}`, borderRadius: 10, padding: "10px 4px", textAlign: "center" }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: school === "慶應" ? C.keio : C.text, marginBottom: 4 }}>{school}</div>
-                       <div style={{ fontSize: 20, fontWeight: 900, fontFamily: "monospace", color: school === "慶應" ? C.keio : C.text }}>{result.grandTotal !== null ? result.grandTotal.toFixed(1) : "—"}</div>
-            <div style={{ fontSize: 13, color: C.muted }}>pt</div>
+          <div key={school} style={{ background: school === "慶應" ? C.keio + "22" : C.surface, border: `1px solid ${school === "慶應" ? C.keio : C.border}`, borderRadius: 10, padding: "10px 2px", textAlign: "center", overflow: "hidden", minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: school === "慶應" ? C.keio : C.text, marginBottom: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{school}</div>
+                       <div style={{ fontSize: 15, fontWeight: 900, fontFamily: "monospace", color: school === "慶應" ? C.keio : C.text, whiteSpace: "nowrap" }}>{result.grandTotal !== null ? result.grandTotal.toFixed(1) : "—"}</div>
+            <div style={{ fontSize: 11, color: C.muted }}>pt</div>
           </div>
         ))}
       </div>
@@ -1578,7 +1578,7 @@ function CombinedDiffTables({ schoolResults, config, completedEvents, data, mode
                 ? keio.result.grandTotal - keioPlannedResult.grandTotal : null;
               return (
                 <tr style={{ background: C.accent + "0d" }}>
-                  <td style={{ padding: "8px 10px", fontSize: 13, color: C.muted }}>慶應 想定差</td>
+                  <td style={{ padding: "8px 10px", fontSize: 13, color: C.muted }}>想定差</td>
                   <td style={{ padding: "8px 8px", textAlign: "center", fontFamily: "monospace", fontWeight: 700, color: diffColor(dPlan) }}>
                     {signStr(dPlan, "pt")}
                   </td>
@@ -1637,7 +1637,7 @@ function CombinedDiffTables({ schoolResults, config, completedEvents, data, mode
                   onClick={() => setDiffPopup({ event: e, dPts, rosterResult: keioActualEv, rosterLabel: "慶應" })}
                   style={{ background: ecfg.color + "0d", cursor: "pointer" }}
                 >
-                  <td style={{ padding: "8px 10px", fontSize: 13, color: C.muted }}>慶應 想定差 <span style={{ fontSize: 12, color: C.muted }}>▶</span></td>
+                  <td style={{ padding: "8px 10px", fontSize: 13, color: C.muted }}>想定差 <span style={{ fontSize: 12, color: C.muted }}>▶</span></td>
                   <td style={{ padding: "6px 8px", textAlign: "center", fontFamily: "monospace", fontSize: 14, fontWeight: 700, color: diffColor(dPts) }}>{signStr(dPts, "pt")}</td>
                   <td style={{ padding: "6px 4px", textAlign: "center", fontFamily: "monospace", fontSize: 13, color: C.men }}>
                     {dPts === null ? "—" : (
@@ -1725,7 +1725,7 @@ function CombinedEventBreakdown({ schoolResults, mode, config, data }) {
                 })}
                 <tr onClick={() => setPopup({ school: "慶應", event: e })} style={{ background: C.accent + "0d", cursor: "pointer" }}>
                   <td style={{ padding: "8px 10px", fontSize: 13, color: C.muted }}>
-                    慶應 想定差 <span style={{ fontSize: 12, color: C.muted }}>▶</span>
+                    想定差 <span style={{ fontSize: 12, color: C.muted }}>▶</span>
                   </td>
                   <td style={{ padding: "8px 8px", textAlign: "center", fontFamily: "monospace", fontWeight: 700, color: diffColor(dPts) }}>
                     {signStr(dPts, "pt")}
@@ -1833,12 +1833,12 @@ function CombinedTab({ config, data }) {
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(64px, 1fr))", gap: 8, marginBottom: 14 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(72px, 1fr))", gap: 6, marginBottom: 14 }}>
         {schoolResults.map(({ school, result }) => (
-          <div key={school} style={{ background: school === "慶應" ? C.keio + "22" : C.surface, border: `1px solid ${school === "慶應" ? C.keio : C.border}`, borderRadius: 10, padding: "10px 4px", textAlign: "center" }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: school === "慶應" ? C.keio : C.text, marginBottom: 4 }}>{school}</div>
-            <div style={{ fontSize: 20, fontWeight: 900, fontFamily: "monospace", color: school === "慶應" ? C.keio : C.text }}>{result.grandTotal !== null ? result.grandTotal.toFixed(1) : "—"}</div>
-            <div style={{ fontSize: 13, color: C.muted }}>pt</div>
+          <div key={school} style={{ background: school === "慶應" ? C.keio + "22" : C.surface, border: `1px solid ${school === "慶應" ? C.keio : C.border}`, borderRadius: 10, padding: "10px 2px", textAlign: "center", overflow: "hidden", minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: school === "慶應" ? C.keio : C.text, marginBottom: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{school}</div>
+            <div style={{ fontSize: 15, fontWeight: 900, fontFamily: "monospace", color: school === "慶應" ? C.keio : C.text, whiteSpace: "nowrap" }}>{result.grandTotal !== null ? result.grandTotal.toFixed(1) : "—"}</div>
+            <div style={{ fontSize: 11, color: C.muted }}>pt</div>
           </div>
         ))}
       </div>

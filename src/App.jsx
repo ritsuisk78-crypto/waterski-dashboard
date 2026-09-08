@@ -1331,6 +1331,84 @@ function ResultTab({ config, data, gender }) {
   );
 }
 
+function CombinedRosterBody({ event, result, onNameTap }) {
+  const ecfg = ECFG[event];
+  return (
+    <>
+      {result.list.map((sk) => {
+        const isAdopted = result.adopted.has(sk.listIdx);
+        const hasActual = sk.actual !== "";
+        const displayScore = event === "jump" && sk.score !== null
+          ? `${sk.score}m → ${applyHandicap(sk.score, event, sk.handicap)}m`
+          : sk.score !== null ? `${sk.score}${ecfg.unit}` : "—";
+        return (
+          <div key={`${sk.gender}-${sk.srcIdx}`} style={{
+            display: "flex", alignItems: "center", gap: 10,
+            padding: "10px 12px", marginBottom: 8,
+            background: isAdopted ? C.accent + "11" : C.surface2,
+            border: `1px solid ${isAdopted ? C.accent + "44" : C.border}`,
+            borderRadius: 10,
+          }}>
+            <div style={{
+              width: 24, height: 24, borderRadius: "50%", flexShrink: 0,
+              background: isAdopted ? C.accent : (sk.gender === "men" ? C.men + "33" : C.women + "33"),
+              border: `1px solid ${isAdopted ? C.accent : C.border}`,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 12, color: isAdopted ? C.bg : (sk.gender === "men" ? C.men : C.women),
+            }}>{sk.gender === "men" ? "👨" : "👩"}</div>
+
+            <div style={{ flex: 1 }}>
+              <div
+                onClick={() => sk.name && onNameTap(sk.name)}
+                style={{
+                  fontSize: 13, fontWeight: 600,
+                  color: sk.name ? C.text : C.muted,
+                  cursor: sk.name ? "pointer" : "default",
+                  display: "flex", alignItems: "center", gap: 4,
+                }}
+              >
+                {sk.name || "選手"}
+                {sk.name && (
+                  <span style={{ fontSize: 10, color: C.muted, opacity: 0.7 }}>📋</span>
+                )}
+              </div>
+              <div style={{ fontSize: 11, color: C.muted }}>
+                想定: {sk.planned || "—"}{ecfg.unit}
+                {event === "slalom" && sk.planned !== "" && ` （${slalomBreakdown(sk.planned, sk.gender)}）`}
+              </div>
+            </div>
+
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 13, fontFamily: "monospace", fontWeight: 700, color: hasActual ? ecfg.color : C.muted }}>
+                {displayScore}
+                {hasActual && <span style={{ fontSize: 9, color: C.positive, marginLeft: 4 }}>実</span>}
+              </div>
+              {event === "slalom" && sk.score !== null && (
+                <div style={{ fontSize: 10, color: C.muted }}>（{slalomBreakdown(sk.score, sk.gender)}）</div>
+              )}
+              <div style={{ fontSize: 12, fontFamily: "monospace", color: isAdopted ? C.accent : C.muted, fontWeight: isAdopted ? 700 : 400 }}>
+                {sk.pts !== null ? `${sk.pts.toFixed(1)}pt${isAdopted ? " ★" : ""}` : "—"}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+
+      <div style={{ marginTop: 4, marginBottom: 4, display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ flex: 1, height: 4, background: C.bg, borderRadius: 2, overflow: "hidden" }}>
+          <div style={{
+            height: "100%",
+            width: `${result.total ? result.filledActual / result.total * 100 : 0}%`,
+            background: result.filledActual === result.total ? C.positive : ecfg.color,
+            borderRadius: 2, transition: "width 0.3s",
+          }} />
+        </div>
+        <MiniProgress filled={result.filledActual} total={result.total} color={ecfg.color} />
+      </div>
+    </>
+  );
+}
+
 function CombinedPlayerPopup({ school, event, mode, config, data, onClose }) {
   const ecfg = ECFG[event];
   const result = calcCombinedEventResult(event, school, config, mode, data);
@@ -1361,76 +1439,7 @@ function CombinedPlayerPopup({ school, event, mode, config, data, onClose }) {
             <button onClick={onClose} style={{ background: "none", border: "none", color: C.muted, fontSize: 22, cursor: "pointer", marginLeft: 8 }}>✕</button>
           </div>
 
-          {result.list.map((sk) => {
-            const isAdopted = result.adopted.has(sk.listIdx);
-            const hasActual = sk.actual !== "";
-            const displayScore = event === "jump" && sk.score !== null
-              ? `${sk.score}m → ${applyHandicap(sk.score, event, sk.handicap)}m`
-              : sk.score !== null ? `${sk.score}${ecfg.unit}` : "—";
-            return (
-              <div key={`${sk.gender}-${sk.srcIdx}`} style={{
-                display: "flex", alignItems: "center", gap: 10,
-                padding: "10px 12px", marginBottom: 8,
-                background: isAdopted ? C.accent + "11" : C.surface2,
-                border: `1px solid ${isAdopted ? C.accent + "44" : C.border}`,
-                borderRadius: 10,
-              }}>
-                <div style={{
-                  width: 24, height: 24, borderRadius: "50%", flexShrink: 0,
-                  background: isAdopted ? C.accent : (sk.gender === "men" ? C.men + "33" : C.women + "33"),
-                  border: `1px solid ${isAdopted ? C.accent : C.border}`,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 12, color: isAdopted ? C.bg : (sk.gender === "men" ? C.men : C.women),
-                }}>{sk.gender === "men" ? "👨" : "👩"}</div>
-
-                <div style={{ flex: 1 }}>
-                  <div
-                    onClick={() => sk.name && setHistoryTarget(sk.name)}
-                    style={{
-                      fontSize: 13, fontWeight: 600,
-                      color: sk.name ? C.text : C.muted,
-                      cursor: sk.name ? "pointer" : "default",
-                      display: "flex", alignItems: "center", gap: 4,
-                    }}
-                  >
-                    {sk.name || "選手"}
-                    {sk.name && (
-                      <span style={{ fontSize: 10, color: C.muted, opacity: 0.7 }}>📋</span>
-                    )}
-                  </div>
-                  <div style={{ fontSize: 11, color: C.muted }}>
-                    想定: {sk.planned || "—"}{ecfg.unit}
-                    {event === "slalom" && sk.planned !== "" && ` （${slalomBreakdown(sk.planned, sk.gender)}）`}
-                  </div>
-                </div>
-
-                <div style={{ textAlign: "right" }}>
-                  <div style={{ fontSize: 13, fontFamily: "monospace", fontWeight: 700, color: hasActual ? ecfg.color : C.muted }}>
-                    {displayScore}
-                    {hasActual && <span style={{ fontSize: 9, color: C.positive, marginLeft: 4 }}>実</span>}
-                  </div>
-                  {event === "slalom" && sk.score !== null && (
-                    <div style={{ fontSize: 10, color: C.muted }}>（{slalomBreakdown(sk.score, sk.gender)}）</div>
-                  )}
-                  <div style={{ fontSize: 12, fontFamily: "monospace", color: isAdopted ? C.accent : C.muted, fontWeight: isAdopted ? 700 : 400 }}>
-                    {sk.pts !== null ? `${sk.pts.toFixed(1)}pt${isAdopted ? " ★" : ""}` : "—"}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-
-          <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ flex: 1, height: 4, background: C.bg, borderRadius: 2, overflow: "hidden" }}>
-              <div style={{
-                height: "100%",
-                width: `${result.total ? result.filledActual / result.total * 100 : 0}%`,
-                background: result.filledActual === result.total ? C.positive : ecfg.color,
-                borderRadius: 2, transition: "width 0.3s",
-              }} />
-            </div>
-            <MiniProgress filled={result.filledActual} total={result.total} color={ecfg.color} />
-          </div>
+          <CombinedRosterBody event={event} result={result} onNameTap={setHistoryTarget} />
         </div>
       </div>
 
@@ -1441,36 +1450,15 @@ function CombinedPlayerPopup({ school, event, mode, config, data, onClose }) {
   );
 }
 
-function evTopList(evResult) {
-  return evResult.list
-    .filter(s => evResult.adopted.has(s.listIdx))
-    .sort((a, b) => b.pts - a.pts);
-}
-
 function CombinedDiffDetailPopup({ event, keioEv, otherEv, otherLabel, config, onClose }) {
   const ecfg = ECFG[event];
   const dPts = keioEv.totalPts !== null && otherEv.totalPts !== null ? keioEv.totalPts - otherEv.totalPts : null;
   const menEffPin   = event === "jump" ? Math.max(0, parseFloat(config.men.pin.jump)   - parseFloat(config.men.handicap))   : parseFloat(config.men.pin[event]);
   const womenEffPin = event === "jump" ? Math.max(0, parseFloat(config.women.pin.jump) - parseFloat(config.women.handicap)) : parseFloat(config.women.pin[event]);
-
-  const keioTop  = evTopList(keioEv);
-  const otherTop = evTopList(otherEv);
-
-  const MiniRoster = ({ title, list, color }) => (
-    <div style={{ flex: 1, minWidth: 0 }}>
-      <div style={{ fontSize: 10, color, fontWeight: 700, marginBottom: 6 }}>{title}</div>
-      {list.length === 0 && <div style={{ fontSize: 11, color: C.muted }}>—</div>}
-      {list.map((s, i) => (
-        <div key={i} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, marginBottom: 4, overflow: "hidden" }}>
-          <span style={{ flexShrink: 0 }}>{s.gender === "men" ? "👨" : "👩"}</span>
-          <span style={{ flex: 1, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name || "選手"}</span>
-          <span style={{ flexShrink: 0, fontFamily: "monospace", color: C.accent }}>{s.pts.toFixed(1)}</span>
-        </div>
-      ))}
-    </div>
-  );
+  const [historyTarget, setHistoryTarget] = useState(null);
 
   return (
+    <>
     <div
       style={{ position: "fixed", inset: 0, zIndex: 320, background: C.overlay, backdropFilter: "blur(6px)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}
       onClick={onClose}
@@ -1478,6 +1466,7 @@ function CombinedDiffDetailPopup({ event, keioEv, otherEv, otherLabel, config, o
       <div onClick={e => e.stopPropagation()} style={{
         background: C.surface, border: `1px solid ${ecfg.color}44`,
         borderRadius: "16px 16px 0 0", width: "100%", maxWidth: 600, padding: "20px 16px 40px",
+        maxHeight: "85vh", overflowY: "auto",
       }}>
         <div style={{ width: 36, height: 4, background: C.border, borderRadius: 2, margin: "0 auto 16px" }} />
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
@@ -1494,7 +1483,7 @@ function CombinedDiffDetailPopup({ event, keioEv, otherEv, otherLabel, config, o
         </div>
 
         {dPts !== null && (
-          <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+          <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
             <div style={{ flex: 1, background: C.men + "11", border: `1px solid ${C.men}44`, borderRadius: 10, padding: "10px 12px", textAlign: "center" }}>
               <div style={{ fontSize: 10, color: C.men, marginBottom: 4 }}>👨 男子の{ecfg.label}なら</div>
               <div style={{ fontSize: 15, fontWeight: 700, fontFamily: "monospace", color: C.men }}>
@@ -1510,22 +1499,87 @@ function CombinedDiffDetailPopup({ event, keioEv, otherEv, otherLabel, config, o
           </div>
         )}
 
-        <div style={{ fontSize: 10, color: C.muted, marginBottom: 8 }}>採用{COMBINED_TOP_N}人の内訳</div>
-        <div style={{ display: "flex", gap: 14, background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px" }}>
-          <MiniRoster title={`慶應`} list={keioTop} color={C.keio} />
-          <div style={{ width: 1, background: C.border }} />
-          <MiniRoster title={otherLabel} list={otherTop} color={C.muted} />
+        <div style={{ fontSize: 12, fontWeight: 700, color: C.keio, marginBottom: 8, borderBottom: `1px solid ${C.border}`, paddingBottom: 6 }}>
+          🔵 慶應　換算pt {keioEv.totalPts !== null ? `${keioEv.totalPts.toFixed(1)}pt` : "—"}
+        </div>
+        <CombinedRosterBody event={event} result={keioEv} onNameTap={setHistoryTarget} />
+
+        <div style={{ fontSize: 12, fontWeight: 700, color: C.text, marginTop: 10, marginBottom: 8, borderBottom: `1px solid ${C.border}`, paddingBottom: 6 }}>
+          ⚪ {otherLabel}　換算pt {otherEv.totalPts !== null ? `${otherEv.totalPts.toFixed(1)}pt` : "—"}
+        </div>
+        <CombinedRosterBody event={event} result={otherEv} onNameTap={setHistoryTarget} />
+      </div>
+    </div>
+
+      {historyTarget && (
+        <PlayerHistoryPopup kanjiInput={historyTarget} onClose={() => setHistoryTarget(null)} />
+      )}
+    </>
+  );
+}
+
+function CombinedTotalDiffPopup({ dTotal, otherLabel, config, onClose }) {
+  return (
+    <div
+      style={{ position: "fixed", inset: 0, zIndex: 320, background: C.overlay, backdropFilter: "blur(6px)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}
+      onClick={onClose}
+    >
+      <div onClick={e => e.stopPropagation()} style={{
+        background: C.surface, border: `1px solid ${C.accent}44`,
+        borderRadius: "16px 16px 0 0", width: "100%", maxWidth: 600, padding: "20px 16px 40px",
+      }}>
+        <div style={{ width: 36, height: 4, background: C.border, borderRadius: 2, margin: "0 auto 16px" }} />
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: C.accent }}>🤝 男女総合</div>
+            <div style={{ fontSize: 12, color: C.muted }}>慶應 vs {otherLabel}</div>
+          </div>
+          <button onClick={onClose} style={{ marginLeft: "auto", background: "none", border: "none", color: C.muted, fontSize: 22, cursor: "pointer" }}>✕</button>
+        </div>
+
+        <div style={{ textAlign: "center", marginBottom: 16 }}>
+          <div style={{ fontSize: 10, color: C.muted, marginBottom: 2 }}>男女総合　換算点差</div>
+          <div style={{ fontSize: 28, fontWeight: 900, fontFamily: "monospace", color: diffColor(dTotal) }}>{signStr(dTotal, "pt")}</div>
+        </div>
+
+        <div style={{ fontSize: 11, color: C.muted, marginBottom: 10 }}>もしこの差がすべて…</div>
+        <div style={{ display: "grid", gap: 8 }}>
+          {EVENTS.map(e => {
+            const ecfg = ECFG[e];
+            const menEffPin   = e === "jump" ? Math.max(0, parseFloat(config.men.pin.jump)   - parseFloat(config.men.handicap))   : parseFloat(config.men.pin[e]);
+            const womenEffPin = e === "jump" ? Math.max(0, parseFloat(config.women.pin.jump) - parseFloat(config.women.handicap)) : parseFloat(config.women.pin[e]);
+            const sign = dTotal >= 0 ? "+" : "-";
+            return (
+              <div key={e} style={{
+                display: "flex", alignItems: "center", gap: 10,
+                background: ecfg.color + "0d", border: `1px solid ${ecfg.color}33`, borderRadius: 10,
+                padding: "10px 12px",
+              }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: ecfg.color, width: 76, flexShrink: 0 }}>{ecfg.icon} {ecfg.label}なら</div>
+                <div style={{ flex: 1, display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: 9, color: C.men }}>👨男子</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, fontFamily: "monospace", color: C.men }}>{sign}{ptToUnit(dTotal, menEffPin)}{ecfg.unit}</div>
+                  </div>
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: 9, color: C.women }}>👩女子</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, fontFamily: "monospace", color: C.women }}>{sign}{ptToUnit(dTotal, womenEffPin)}{ecfg.unit}</div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
   );
 }
 
-
 function CombinedDiffTables({ schoolResults, config, completedEvents, data, mode }) {
   const keio = schoolResults.find(r => r.school === "慶應");
   const others = schoolResults.filter(r => r.school !== "慶應");
   const [diffPopup, setDiffPopup] = useState(null);
+  const [totalPopup, setTotalPopup] = useState(null);
   const keioPlannedResult = calcCombinedSchoolResult("慶應", config, "P", data);
 
   return (
@@ -1551,7 +1605,11 @@ function CombinedDiffTables({ schoolResults, config, completedEvents, data, mode
               return (
                 <tr key={r.school} style={{ borderBottom: `1px solid ${C.border}` }}>
                   <td style={{ padding: "8px 10px", fontWeight: 700, color: C.text }}>{r.school}</td>
-                  <td style={{ padding: "8px 8px", textAlign: "center", fontFamily: "monospace", fontWeight: 700, color: diffColor(d) }}>{signStr(d, "pt")}</td>
+                  <td
+                    onClick={() => d !== null && setTotalPopup({ dTotal: d, otherLabel: r.school })}
+                    style={{ padding: "8px 8px", textAlign: "center", fontFamily: "monospace", fontWeight: 700, color: diffColor(d), cursor: d !== null ? "pointer" : "default" }}>
+                    {signStr(d, "pt")}
+                  </td>
                   {EVENTS.map(e => {
                     const kEv = keio.result.ev[e], rEv = r.result.ev[e];
                     const dEv = kEv.totalPts !== null && rEv.totalPts !== null ? kEv.totalPts - rEv.totalPts : null;
@@ -1572,7 +1630,11 @@ function CombinedDiffTables({ schoolResults, config, completedEvents, data, mode
               return (
                 <tr style={{ background: C.accent + "0d" }}>
                   <td style={{ padding: "8px 10px", fontSize: 11, color: C.muted }}>慶應 想定差</td>
-                  <td style={{ padding: "8px 8px", textAlign: "center", fontFamily: "monospace", fontWeight: 700, color: diffColor(dPlan) }}>{signStr(dPlan, "pt")}</td>
+                  <td
+                    onClick={() => dPlan !== null && setTotalPopup({ dTotal: dPlan, otherLabel: "慶應（想定）" })}
+                    style={{ padding: "8px 8px", textAlign: "center", fontFamily: "monospace", fontWeight: 700, color: diffColor(dPlan), cursor: dPlan !== null ? "pointer" : "default" }}>
+                    {signStr(dPlan, "pt")}
+                  </td>
                   {EVENTS.map(e => {
                     const kEv = keio.result.ev[e], pEv = keioPlannedResult.ev[e];
                     const dEv = kEv.totalPts !== null && pEv.totalPts !== null ? kEv.totalPts - pEv.totalPts : null;
@@ -1649,6 +1711,15 @@ function CombinedDiffTables({ schoolResults, config, completedEvents, data, mode
           otherLabel={diffPopup.isPlan ? "慶應（想定）" : diffPopup.other}
           config={config}
           onClose={() => setDiffPopup(null)}
+        />
+      )}
+
+      {totalPopup && (
+        <CombinedTotalDiffPopup
+          dTotal={totalPopup.dTotal}
+          otherLabel={totalPopup.otherLabel}
+          config={config}
+          onClose={() => setTotalPopup(null)}
         />
       )}
     </>

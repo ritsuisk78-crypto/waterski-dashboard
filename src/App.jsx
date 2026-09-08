@@ -670,6 +670,7 @@ function PlayerPopup({ gender, school, event, mode, config, data, onClose }) {
         <div onClick={e => e.stopPropagation()} style={{
           background: C.surface, border: `1px solid ${ecfg.color}44`,
           borderRadius: "16px 16px 0 0", width: "100%", maxWidth: 600, padding: "20px 16px 40px",
+          maxHeight: "85vh", overflowY: "auto",
         }}>
           <div style={{ width: 36, height: 4, background: C.border, borderRadius: 2, margin: "0 auto 16px" }} />
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
@@ -1006,8 +1007,7 @@ function DiffTables({ gender, schoolResults, config, completedEvents, data, mode
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
           <thead>
             <tr style={{ background: C.bg, borderBottom: `1px solid ${C.border}` }}>
-              <th style={{ padding: "6px 10px", textAlign: "left", color: C.muted, width: "28%" }}>学校</th>
-              <th style={{ padding: "6px 8px", textAlign: "center", color: C.accent }}>換算点差</th>
+              <th style={{ padding: "6px 10px", textAlign: "left", color: C.muted }}>学校 / 換算点差</th>
               {EVENTS.map(e => (
                 <th key={e} style={{ padding: "4px 4px", textAlign: "center", color: ECFG[e].color, fontSize: 12, whiteSpace: "nowrap" }}>
                   {ECFG[e].short}{completedEvents.includes(e) ? "✅" : ""}換算
@@ -1020,8 +1020,10 @@ function DiffTables({ gender, schoolResults, config, completedEvents, data, mode
               const d = keio.result.grandTotal !== null && r.result.grandTotal !== null ? keio.result.grandTotal - r.result.grandTotal : null;
               return (
                 <tr key={r.school} style={{ borderBottom: `1px solid ${C.border}` }}>
-                  <td style={{ padding: "8px 10px", fontWeight: 700, color: C.text }}>{r.school}</td>
-                  <td style={{ padding: "8px 8px", textAlign: "center", fontFamily: "monospace", fontWeight: 700, color: diffColor(d) }}>{signStr(d, "pt")}</td>
+                  <td style={{ padding: "8px 10px" }}>
+                    <div style={{ fontWeight: 700, color: C.text }}>{r.school}</div>
+                    <div style={{ fontFamily: "monospace", fontWeight: 700, fontSize: 13, color: diffColor(d), marginTop: 2 }}>{signStr(d, "pt")}</div>
+                  </td>
                   {EVENTS.map(e => {
                     const effPin = e === "jump" ? Math.max(0, parseFloat(cfg.pin[e]) - parseFloat(cfg.handicap)) : parseFloat(cfg.pin[e]);
                     return (
@@ -1041,8 +1043,10 @@ function DiffTables({ gender, schoolResults, config, completedEvents, data, mode
                   onClick={() => setDiffPopup({ school: "慶應", event: "slalom" })}
                   style={{ background: C.accent + "0d", cursor: "pointer" }}
                 >
-                  <td style={{ padding: "8px 10px", fontSize: 13, color: C.muted }}>想定差 <span style={{ fontSize: 12, color: C.muted }}>▶</span></td>
-                  <td style={{ padding: "8px 8px", textAlign: "center", fontFamily: "monospace", fontWeight: 700, color: diffColor(dPlan) }}>{signStr(dPlan, "pt")}</td>
+                  <td style={{ padding: "8px 10px" }}>
+                    <div style={{ fontSize: 13, color: C.muted }}>想定差 <span style={{ fontSize: 12, color: C.muted }}>▶</span></div>
+                    <div style={{ fontFamily: "monospace", fontWeight: 700, fontSize: 13, color: diffColor(dPlan), marginTop: 2 }}>{signStr(dPlan, "pt")}</div>
+                  </td>
                   {EVENTS.map(e => {
                     const effPin = e === "jump" ? Math.max(0, parseFloat(cfg.pin[e]) - parseFloat(cfg.handicap)) : parseFloat(cfg.pin[e]);
                     return (
@@ -1423,6 +1427,7 @@ function CombinedPlayerPopup({ school, event, mode, config, data, onClose }) {
         <div onClick={e => e.stopPropagation()} style={{
           background: C.surface, border: `1px solid ${ecfg.color}44`,
           borderRadius: "16px 16px 0 0", width: "100%", maxWidth: 600, padding: "20px 16px 40px",
+          maxHeight: "85vh", overflowY: "auto",
         }}>
           <div style={{ width: 36, height: 4, background: C.border, borderRadius: 2, margin: "0 auto 16px" }} />
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
@@ -1547,8 +1552,7 @@ function CombinedDiffTables({ schoolResults, config, completedEvents, data, mode
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
           <thead>
             <tr style={{ background: C.bg, borderBottom: `1px solid ${C.border}` }}>
-              <th style={{ padding: "6px 10px", textAlign: "left", color: C.muted, width: "34%" }}>学校</th>
-              <th style={{ padding: "6px 8px", textAlign: "center", color: C.accent }}>換算点差</th>
+              <th style={{ padding: "6px 10px", textAlign: "left", color: C.muted }}>学校 / 換算点差</th>
               {EVENTS.map(e => (
                 <th key={e} style={{ padding: "4px 4px", textAlign: "center", color: ECFG[e].color, fontSize: 12, whiteSpace: "nowrap" }}>
                   {ECFG[e].short}{completedEvents.includes(e) ? "✅" : ""}
@@ -1561,9 +1565,9 @@ function CombinedDiffTables({ schoolResults, config, completedEvents, data, mode
               const d = keio.result.grandTotal !== null && r.result.grandTotal !== null ? keio.result.grandTotal - r.result.grandTotal : null;
               return (
                 <tr key={r.school} style={{ borderBottom: `1px solid ${C.border}` }}>
-                  <td style={{ padding: "8px 10px", fontWeight: 700, color: C.text }}>{r.school}</td>
-                  <td style={{ padding: "8px 8px", textAlign: "center", fontFamily: "monospace", fontWeight: 700, color: diffColor(d) }}>
-                    {signStr(d, "pt")}
+                  <td style={{ padding: "8px 10px" }}>
+                    <div style={{ fontWeight: 700, color: C.text }}>{r.school}</div>
+                    <div style={{ fontFamily: "monospace", fontWeight: 700, fontSize: 13, color: diffColor(d), marginTop: 2 }}>{signStr(d, "pt")}</div>
                   </td>
                   {EVENTS.map(e => (
                     <td key={e} style={{ padding: "6px 3px", textAlign: "center", fontFamily: "monospace", whiteSpace: "nowrap" }}>
@@ -1578,9 +1582,9 @@ function CombinedDiffTables({ schoolResults, config, completedEvents, data, mode
                 ? keio.result.grandTotal - keioPlannedResult.grandTotal : null;
               return (
                 <tr style={{ background: C.accent + "0d" }}>
-                  <td style={{ padding: "8px 10px", fontSize: 13, color: C.muted }}>想定差</td>
-                  <td style={{ padding: "8px 8px", textAlign: "center", fontFamily: "monospace", fontWeight: 700, color: diffColor(dPlan) }}>
-                    {signStr(dPlan, "pt")}
+                  <td style={{ padding: "8px 10px" }}>
+                    <div style={{ fontSize: 13, color: C.muted }}>想定差</div>
+                    <div style={{ fontFamily: "monospace", fontWeight: 700, fontSize: 13, color: diffColor(dPlan), marginTop: 2 }}>{signStr(dPlan, "pt")}</div>
                   </td>
                   {EVENTS.map(e => (
                     <td key={e} style={{ padding: "6px 3px", textAlign: "center", fontFamily: "monospace", whiteSpace: "nowrap" }}>
@@ -1607,10 +1611,9 @@ function CombinedDiffTables({ schoolResults, config, completedEvents, data, mode
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
               <thead>
                 <tr style={{ background: C.bg, borderBottom: `1px solid ${C.border}` }}>
-                  <th style={{ padding: "6px 10px", textAlign: "left", color: C.muted, width: "30%" }}>学校</th>
-                  <th style={{ padding: "6px 8px", textAlign: "center", color: C.accent }}>換算点差</th>
-                  <th style={{ padding: "6px 8px", textAlign: "center", color: C.muted, fontSize: 11 }}>男子換算</th>
-                  <th style={{ padding: "6px 8px", textAlign: "center", color: C.muted, fontSize: 11 }}>女子換算</th>
+                  <th style={{ padding: "6px 10px", textAlign: "left", color: C.muted }}>学校 / 換算点差</th>
+                  <th style={{ padding: "6px 6px", textAlign: "center", color: C.muted, fontSize: 11 }}>男子換算</th>
+                  <th style={{ padding: "6px 6px", textAlign: "center", color: C.muted, fontSize: 11 }}>女子換算</th>
                 </tr>
               </thead>
               <tbody>
@@ -1622,12 +1625,14 @@ function CombinedDiffTables({ schoolResults, config, completedEvents, data, mode
                   return (
                     <tr key={r.school} style={{ borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}
                       onClick={() => setDiffPopup({ event: e, dPts: ptDiff, rosterResult: rEv, rosterLabel: r.school })}>
-                      <td style={{ padding: "8px 10px", fontWeight: 700, color: C.text }}>{r.school} <span style={{ fontSize: 12, color: C.muted }}>▶</span></td>
-                      <td style={{ padding: "6px 8px", textAlign: "center", fontFamily: "monospace", fontSize: 15, fontWeight: 700, color: diffColor(ptDiff) }}>{signStr(ptDiff, "pt")}</td>
-                      <td style={{ padding: "6px 4px", textAlign: "center", fontFamily: "monospace", fontSize: 13, color: C.men }}>
+                      <td style={{ padding: "8px 10px" }}>
+                        <div style={{ fontWeight: 700, color: C.text }}>{r.school} <span style={{ fontSize: 12, color: C.muted }}>▶</span></div>
+                        <div style={{ fontFamily: "monospace", fontSize: 14, fontWeight: 700, color: diffColor(ptDiff), marginTop: 2 }}>{signStr(ptDiff, "pt")}</div>
+                      </td>
+                      <td style={{ padding: "6px 3px", textAlign: "center", fontFamily: "monospace", fontSize: 13, color: C.men, whiteSpace: "nowrap" }}>
                         {ptDiff === null ? "—" : `${sign}${ptToUnit(ptDiff, eventEffPin(e, "men", config))}${ecfg.unit}`}
                       </td>
-                      <td style={{ padding: "6px 4px", textAlign: "center", fontFamily: "monospace", fontSize: 13, color: C.women }}>
+                      <td style={{ padding: "6px 3px", textAlign: "center", fontFamily: "monospace", fontSize: 13, color: C.women, whiteSpace: "nowrap" }}>
                         {ptDiff === null ? "—" : `${sign}${ptToUnit(ptDiff, eventEffPin(e, "women", config))}${ecfg.unit}`}
                       </td>
                     </tr>
@@ -1637,9 +1642,11 @@ function CombinedDiffTables({ schoolResults, config, completedEvents, data, mode
                   onClick={() => setDiffPopup({ event: e, dPts, rosterResult: keioActualEv, rosterLabel: "慶應" })}
                   style={{ background: ecfg.color + "0d", cursor: "pointer" }}
                 >
-                  <td style={{ padding: "8px 10px", fontSize: 13, color: C.muted }}>想定差 <span style={{ fontSize: 12, color: C.muted }}>▶</span></td>
-                  <td style={{ padding: "6px 8px", textAlign: "center", fontFamily: "monospace", fontSize: 14, fontWeight: 700, color: diffColor(dPts) }}>{signStr(dPts, "pt")}</td>
-                  <td style={{ padding: "6px 4px", textAlign: "center", fontFamily: "monospace", fontSize: 13, color: C.men }}>
+                  <td style={{ padding: "8px 10px" }}>
+                    <div style={{ fontSize: 13, color: C.muted }}>想定差 <span style={{ fontSize: 12, color: C.muted }}>▶</span></div>
+                    <div style={{ fontFamily: "monospace", fontSize: 14, fontWeight: 700, color: diffColor(dPts), marginTop: 2 }}>{signStr(dPts, "pt")}</div>
+                  </td>
+                  <td style={{ padding: "6px 3px", textAlign: "center", fontFamily: "monospace", fontSize: 13, color: C.men, whiteSpace: "nowrap" }}>
                     {dPts === null ? "—" : (
                       <>
                         <div>{dPts >= 0 ? "+" : "-"}{ptToUnit(dPts, eventEffPin(e, "men", config))}{ecfg.unit}</div>
@@ -1651,7 +1658,7 @@ function CombinedDiffTables({ schoolResults, config, completedEvents, data, mode
                       </>
                     )}
                   </td>
-                  <td style={{ padding: "6px 4px", textAlign: "center", fontFamily: "monospace", fontSize: 13, color: C.women }}>
+                  <td style={{ padding: "6px 3px", textAlign: "center", fontFamily: "monospace", fontSize: 13, color: C.women, whiteSpace: "nowrap" }}>
                     {dPts === null ? "—" : (
                       <>
                         <div>{dPts >= 0 ? "+" : "-"}{ptToUnit(dPts, eventEffPin(e, "women", config))}{ecfg.unit}</div>

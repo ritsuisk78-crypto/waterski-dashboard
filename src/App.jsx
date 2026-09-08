@@ -67,19 +67,20 @@ function formatScore(event, scoreRaw) {
 }
 
 const SLALOM_ROPE_SEQUENCE = [16, 14.25, 13, 12, 11.25, 10.75, 10.25, 9.75];
-function slalomBreakdown(totalBuoys, gender) {
+function slalomBreakdown(totalBuoys, gender, startSpeed) {
   const v = parseFloat(totalBuoys);
   if (isNaN(v) || v < 0) return null;
   const maxSpeed = gender === "women" ? 55 : 58;
-  const startSpeed = maxSpeed - 9;
-  const speedSteps = (maxSpeed - startSpeed) / 3;
+  const ss = parseFloat(startSpeed);
+  const start = !isNaN(ss) && ss > 0 ? ss : (gender === "women" ? 46 : 49);
+  const speedSteps = (maxSpeed - start) / 3;
   const buoysPerPass = 6;
 
   const fullPasses = Math.floor(v / buoysPerPass);
   const partial = Math.round((v - fullPasses * buoysPerPass) * 100) / 100;
 
   if (fullPasses <= speedSteps) {
-    const speed = startSpeed + 3 * fullPasses;
+    const speed = start + 3 * fullPasses;
     return `${partial}@${speed}km`;
   }
   const ropeIdx = fullPasses - speedSteps - 1;
@@ -254,18 +255,19 @@ const ECFG = {
   jump:   { label: "ジャンプ",   short: "J", color: C.jump,   unit: "m",    icon: "🚀", step: "0.5" },
 };
 
-const COMP_ORDER = ["cs1_2025","cs2_2025","inkare_2025","shinjin_2025","cs1_2026","cs2_2026","kizuna_2026","hogaku_2026","biwa_2026","asaichi1_2026","asaichi2_2026","asaichi3_2026","asaichi4_2026"];
+const COMP_ORDER = ["cs1_2025","cs2_2025","inkare_2025","shinjin_2025","cs1_2026","cs2_2026","kizuna_2026","hogaku_2026","biwa_2026","asaichi1_2026","asaichi2_2026","asaichi3_2026","asaichi4_2026","inkare_2026"];
 
 const COMP_SHORT = {
   cs1_2025:"CS1'25", cs2_2025:"CS2'25",
   inkare_2025:"全日'25", shinjin_2025:"新人'25",
   cs1_2026:"CS1'26", cs2_2026:"CS2'26", kizuna_2026:"絆'26", hogaku_2026:"法学戦'26",
   asaichi1_2026:"朝一①'26", asaichi2_2026:"朝一②'26", asaichi3_2026:"朝一③'26", asaichi4_2026:"朝一④'26", biwa_2026:"琵琶湖'26",
+  inkare_2026:"全日'26",
 };
 
 const DEFAULT_CONFIG = {
-  men:   { pin: { slalom: 40, trick: 5500, jump: 50 }, topN: 3, out: 4, handicap: 20, label: "男子", icon: "👨", color: C.men },
-  women: { pin: { slalom: 32, trick: 2900, jump: 29 }, topN: 3, out: 4, handicap: 10, label: "女子", icon: "👩", color: C.women },
+  men:   { pin: { slalom: 40, trick: 5500, jump: 50 }, topN: 3, out: 4, handicap: 20, startSpeed: 49, label: "男子", icon: "👨", color: C.men },
+  women: { pin: { slalom: 32, trick: 2900, jump: 29 }, topN: 3, out: 4, handicap: 10, startSpeed: 46, label: "女子", icon: "👩", color: C.women },
 };
 
 function buildSkiers(count) {
@@ -351,10 +353,16 @@ function calcCombinedEventResult(event, schoolName, config, mode, data) {
   const valid = list.filter(s => s.pts !== null).sort((a, b) => b.pts - a.pts);
   const adopted = new Set(valid.slice(0, COMBINED_TOP_N).map(s => s.listIdx));
   const top = valid.slice(0, COMBINED_TOP_N);
+  const topMen = top.filter(s => s.gender === "men");
+  const topWomen = top.filter(s => s.gender === "women");
   const filledActual = pooled.filter(sk => sk.actual !== "").length;
   return {
     list, adopted,
     totalPts: top.length ? top.reduce((a, s) => a + s.pts, 0) : null,
+    totalScoreMen: topMen.length ? topMen.reduce((a, s) => a + parseFloat(s.score), 0) : null,
+    totalPtsMen: topMen.length ? topMen.reduce((a, s) => a + s.pts, 0) : null,
+    totalScoreWomen: topWomen.length ? topWomen.reduce((a, s) => a + parseFloat(s.score), 0) : null,
+    totalPtsWomen: topWomen.length ? topWomen.reduce((a, s) => a + s.pts, 0) : null,
     filledActual, total: pooled.length,
   };
 }
@@ -733,7 +741,7 @@ function PlayerPopup({ gender, school, event, mode, config, data, onClose }) {
                   </div>
                   <div style={{ fontSize: 13, color: C.muted }}>
                     想定: {sk.planned || "—"}{ecfg.unit}
-                    {event === "slalom" && sk.planned !== "" && ` （${slalomBreakdown(sk.planned, gender)}）`}
+                    {event === "slalom" && sk.planned !== "" && ` （${slalomBreakdown(sk.planned, gender, cfg.startSpeed)}）`}
                   </div>
                 </div>
 
@@ -743,7 +751,7 @@ function PlayerPopup({ gender, school, event, mode, config, data, onClose }) {
                     {hasActual && <span style={{ fontSize: 11, color: C.positive, marginLeft: 4 }}>実</span>}
                   </div>
                   {event === "slalom" && score !== null && (
-                    <div style={{ fontSize: 12, color: C.muted }}>（{slalomBreakdown(score, gender)}）</div>
+                    <div style={{ fontSize: 12, color: C.muted }}>（{slalomBreakdown(score, gender, cfg.startSpeed)}）</div>
                   )}
                   <div style={{ fontSize: 14, fontFamily: "monospace", color: isAdopted ? C.accent : C.muted, fontWeight: isAdopted ? 700 : 400 }}>
                     {pts !== null ? `${pts.toFixed(1)}pt${isAdopted ? " ★" : ""}` : "—"}
@@ -788,8 +796,13 @@ function SettingsTab({ config, setConfig, onReset, onSave, saving, saved, gender
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
           {EVENTS.map(e => (
             <div key={e}>
-              <div style={{ fontSize: 12, color: ECFG[e].color, marginBottom: 4 }}>{ECFG[e].label}（{ECFG[e].unit}）</div>
+              <div style={{ fontSize: 12, color: ECFG[e].color, marginBottom: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{ECFG[e].label}（{ECFG[e].unit}）</div>
               <NumField value={cfg.pin[e]} onChange={v => updatePin(e, v)} placeholder={ECFG[e].label} step={ECFG[e].step} style={{ border: `1px solid ${ECFG[e].color}44`, color: ECFG[e].color }} />
+              {e === "slalom" && cfg.pin.slalom !== "" && slalomBreakdown(cfg.pin.slalom, gender, cfg.startSpeed) && (
+                <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>
+                  （{slalomBreakdown(cfg.pin.slalom, gender, cfg.startSpeed)}）
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -800,17 +813,34 @@ function SettingsTab({ config, setConfig, onReset, onSave, saving, saved, gender
           <div><div style={{ fontSize: 12, color: C.muted, marginBottom: 4 }}>出場人数</div><NumField value={cfg.out} onChange={v => update("out", parseInt(v) || 1)} placeholder="4" step="1" /></div>
           <div><div style={{ fontSize: 12, color: C.muted, marginBottom: 4 }}>採用人数（上位N人どり）</div><NumField value={cfg.topN} onChange={v => update("topN", parseInt(v) || 1)} placeholder="3" step="1" /></div>
           <div><div style={{ fontSize: 12, color: C.jump, marginBottom: 4 }}>🚀 Jハンデ（m引き）</div><NumField value={cfg.handicap} onChange={v => update("handicap", parseFloat(v) || 0)} placeholder="15" step="0.5" style={{ border: `1px solid ${C.jump}44`, color: C.jump }} /></div>
+          <div>
+            <div style={{ fontSize: 12, color: C.slalom, marginBottom: 4 }}>🌊 スラローム初速（km）</div>
+            <NumField value={cfg.startSpeed} onChange={v => update("startSpeed", parseFloat(v) || 0)} placeholder={gender === "women" ? "46" : "49"} step="1" style={{ border: `1px solid ${C.slalom}44`, color: C.slalom }} />
+          </div>
         </div>
-      <div style={{ marginTop: 10, fontSize: 13, color: C.muted }}>現在：{cfg.out}人出・{cfg.topN}人どり　Jハンデ -{cfg.handicap}m</div>
+      <div style={{ marginTop: 10, fontSize: 13, color: C.muted }}>現在：{cfg.out}人出・{cfg.topN}人どり　Jハンデ -{cfg.handicap}m　スラローム初速{cfg.startSpeed}km</div>
+        <div style={{ marginTop: 6, fontSize: 12, color: C.muted }}>
+          ※ 通常は男子49km／女子46km。新人戦など初速が変わる大会では、ここを男子46km／女子43kmなどに変更してください。ブイ数→速度/ロープの換算表示に反映されます。
+        </div>
         {(() => {
           const effJump = parseFloat(cfg.pin.jump) - parseFloat(cfg.handicap);
           if (!(effJump > 0)) return null;
           const slalomEquiv = (parseFloat(cfg.pin.slalom) / effJump).toFixed(2);
           const trickEquiv = Math.round(parseFloat(cfg.pin.trick) / effJump);
+          const slalomPt = parseFloat(cfg.pin.slalom) > 0 ? (1000 / parseFloat(cfg.pin.slalom)).toFixed(1) : null;
+          const trickPt  = parseFloat(cfg.pin.trick)  > 0 ? (100000 / parseFloat(cfg.pin.trick)).toFixed(1) : null;
+          const jumpPt   = (1000 / effJump).toFixed(1);
           return (
-            <div style={{ marginTop: 6, fontSize: 13, color: C.jump }}>
-              ジャンプ1m ≒ スラローム{slalomEquiv}ブイ ≒ トリック{trickEquiv}点（現ピン・ハンデ換算）
-            </div>
+            <>
+              <div style={{ marginTop: 6, fontSize: 13, color: C.jump }}>
+                ジャンプ1m ≒ スラローム{slalomEquiv}ブイ ≒ トリック{trickEquiv}点（現ピン・ハンデ換算）
+              </div>
+              <div style={{ marginTop: 6, fontSize: 13, color: C.muted, display: "grid", gap: 2 }}>
+                {slalomPt !== null && <div>スラローム1ブイの換算点＝<span style={{ color: C.slalom, fontFamily: "monospace" }}>{slalomPt}pt</span></div>}
+                {trickPt !== null && <div>トリック100点の換算点＝<span style={{ color: C.trick, fontFamily: "monospace" }}>{trickPt}pt</span></div>}
+                <div>ジャンプ1mの換算点＝<span style={{ color: C.jump, fontFamily: "monospace" }}>{jumpPt}pt</span></div>
+              </div>
+            </>
           );
         })()}
       </div>
@@ -963,14 +993,14 @@ function InputTab({ config, data, setData, gender, saveSkierDebounced }) {
                 <div style={{ fontSize: 12, color: C.muted, marginBottom: 4 }}>想定（{ecfg.unit}）</div>
                 <NumField value={sk.planned} onChange={v => updateSkier(i, "planned", v)} placeholder="—" step={ecfg.step} />
                 {event === "slalom" && sk.planned !== "" && (
-                  <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>（{slalomBreakdown(sk.planned, gender)}）</div>
+                  <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>（{slalomBreakdown(sk.planned, gender, cfg.startSpeed)}）</div>
                 )}
               </div>
               <div>
                 <div style={{ fontSize: 12, color: hasActual ? ecfg.color : C.muted, marginBottom: 4 }}>{hasActual ? "🔴 実際" : "実際"}</div>
                 <NumField value={sk.actual} onChange={v => updateSkier(i, "actual", v)} placeholder="入力" step={ecfg.step} style={{ border: `1px solid ${hasActual ? ecfg.color + "66" : C.border}`, color: hasActual ? ecfg.color : C.text }} />
                 {event === "slalom" && sk.actual !== "" && (
-                  <div style={{ fontSize: 12, color: ecfg.color, marginTop: 2 }}>（{slalomBreakdown(sk.actual, gender)}）</div>
+                  <div style={{ fontSize: 12, color: ecfg.color, marginTop: 2 }}>（{slalomBreakdown(sk.actual, gender, cfg.startSpeed)}）</div>
                 )}
               </div>
               <div>
@@ -1206,7 +1236,7 @@ function EventBreakdown({ gender, schoolResults, mode, config, data }) {
           </div>
         );
       })}
-      {popup && <PlayerPopup gender={gender} school={popup.school} event={popup.event} mode="B" config={config} data={data} onClose={() => setPopup(null)} />}
+      {popup && <PlayerPopup gender={gender} school={popup.school} event={popup.event} mode={mode} config={config} data={data} onClose={() => setPopup(null)} />}
     </div>
   );
 }
@@ -1335,13 +1365,14 @@ function ResultTab({ config, data, gender }) {
   );
 }
 
-function CombinedRosterBody({ event, result, onNameTap }) {
+function CombinedRosterBody({ event, result, onNameTap, mode, config }) {
   const ecfg = ECFG[event];
   return (
     <>
       {result.list.map((sk) => {
         const isAdopted = result.adopted.has(sk.listIdx);
         const hasActual = sk.actual !== "";
+        const startSpeed = config?.[sk.gender]?.startSpeed;
         const displayScore = event === "jump" && sk.score !== null
           ? `${sk.score}m → ${applyHandicap(sk.score, event, sk.handicap)}m`
           : sk.score !== null ? `${sk.score}${ecfg.unit}` : "—";
@@ -1378,17 +1409,17 @@ function CombinedRosterBody({ event, result, onNameTap }) {
               </div>
               <div style={{ fontSize: 13, color: C.muted }}>
                 想定: {sk.planned || "—"}{ecfg.unit}
-                {event === "slalom" && sk.planned !== "" && ` （${slalomBreakdown(sk.planned, sk.gender)}）`}
+                {event === "slalom" && sk.planned !== "" && ` （${slalomBreakdown(sk.planned, sk.gender, startSpeed)}）`}
               </div>
             </div>
 
             <div style={{ textAlign: "right" }}>
               <div style={{ fontSize: 15, fontFamily: "monospace", fontWeight: 700, color: hasActual ? ecfg.color : C.muted }}>
                 {displayScore}
-                {hasActual && <span style={{ fontSize: 11, color: C.positive, marginLeft: 4 }}>実</span>}
+                {hasActual && mode !== "P" && <span style={{ fontSize: 11, color: C.positive, marginLeft: 4 }}>実</span>}
               </div>
               {event === "slalom" && sk.score !== null && (
-                <div style={{ fontSize: 12, color: C.muted }}>（{slalomBreakdown(sk.score, sk.gender)}）</div>
+                <div style={{ fontSize: 12, color: C.muted }}>（{slalomBreakdown(sk.score, sk.gender, startSpeed)}）</div>
               )}
               <div style={{ fontSize: 14, fontFamily: "monospace", color: isAdopted ? C.accent : C.muted, fontWeight: isAdopted ? 700 : 400 }}>
                 {sk.pts !== null ? `${sk.pts.toFixed(1)}pt${isAdopted ? " ★" : ""}` : "—"}
@@ -1444,7 +1475,28 @@ function CombinedPlayerPopup({ school, event, mode, config, data, onClose }) {
             <button onClick={onClose} style={{ background: "none", border: "none", color: C.muted, fontSize: 22, cursor: "pointer", marginLeft: 8 }}>✕</button>
           </div>
 
-          <CombinedRosterBody event={event} result={result} onNameTap={setHistoryTarget} />
+          <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
+            <div style={{ flex: 1, background: C.men + "11", border: `1px solid ${C.men}44`, borderRadius: 10, padding: "8px 10px" }}>
+              <div style={{ fontSize: 12, color: C.men }}>👨 男子チーム合計</div>
+              <div style={{ fontSize: 16, fontWeight: 800, fontFamily: "monospace", color: C.men }}>
+                {result.totalPtsMen !== null ? `${result.totalPtsMen.toFixed(1)}pt` : "—"}
+              </div>
+              <div style={{ fontSize: 12, color: C.muted }}>
+                {result.totalScoreMen !== null ? (event === "jump" ? `${result.totalScoreMen.toFixed(1)}m` : `${result.totalScoreMen}${ecfg.unit}`) : "—"}
+              </div>
+            </div>
+            <div style={{ flex: 1, background: C.women + "11", border: `1px solid ${C.women}44`, borderRadius: 10, padding: "8px 10px" }}>
+              <div style={{ fontSize: 12, color: C.women }}>👩 女子チーム合計</div>
+              <div style={{ fontSize: 16, fontWeight: 800, fontFamily: "monospace", color: C.women }}>
+                {result.totalPtsWomen !== null ? `${result.totalPtsWomen.toFixed(1)}pt` : "—"}
+              </div>
+              <div style={{ fontSize: 12, color: C.muted }}>
+                {result.totalScoreWomen !== null ? (event === "jump" ? `${result.totalScoreWomen.toFixed(1)}m` : `${result.totalScoreWomen}${ecfg.unit}`) : "—"}
+              </div>
+            </div>
+          </div>
+
+          <CombinedRosterBody event={event} result={result} onNameTap={setHistoryTarget} mode={mode} config={config} />
         </div>
       </div>
 
@@ -1506,7 +1558,7 @@ function CombinedDiffDetailPopup({ event, dPts, rosterResult, rosterLabel, confi
         <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 8, borderBottom: `1px solid ${C.border}`, paddingBottom: 6 }}>
           {rosterLabel}　換算pt {rosterResult.totalPts !== null ? `${rosterResult.totalPts.toFixed(1)}pt` : "—"}
         </div>
-        <CombinedRosterBody event={event} result={rosterResult} onNameTap={setHistoryTarget} />
+        <CombinedRosterBody event={event} result={rosterResult} onNameTap={setHistoryTarget} config={config} />
       </div>
     </div>
 
@@ -1744,7 +1796,7 @@ function CombinedEventBreakdown({ schoolResults, mode, config, data }) {
           </div>
         );
       })}
-      {popup && <CombinedPlayerPopup school={popup.school} event={popup.event} mode="B" config={config} data={data} onClose={() => setPopup(null)} />}
+      {popup && <CombinedPlayerPopup school={popup.school} event={popup.event} mode={mode} config={config} data={data} onClose={() => setPopup(null)} />}
     </div>
   );
 }

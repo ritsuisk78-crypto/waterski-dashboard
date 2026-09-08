@@ -265,7 +265,7 @@ const COMP_SHORT = {
 
 const DEFAULT_CONFIG = {
   men:   { pin: { slalom: 40, trick: 5500, jump: 50 }, topN: 3, out: 4, handicap: 20, label: "男子", icon: "👨", color: C.men },
-  women: { pin: { slalom: 32, trick: 2900, jump: 29 }, topN: 2, out: 3, handicap: 10, label: "女子", icon: "👩", color: C.women },
+  women: { pin: { slalom: 32, trick: 2900, jump: 29 }, topN: 3, out: 4, handicap: 10, label: "女子", icon: "👩", color: C.women },
 };
 
 function buildSkiers(count) {
@@ -334,6 +334,48 @@ function calcSchoolResult(schoolName, cfg, mode, data) {
     if (ev[e].totalPts !== null) grandTotal = (grandTotal ?? 0) + ev[e].totalPts;
   }
   return { ev, grandTotal };
+}
+
+const COMBINED_TOP_N = 5;
+
+function calcCombinedEventResult(event, schoolName, config, mode, data) {
+  const menSkiers   = (data.men?.[event]?.[schoolName]   || []).map((sk, i) => ({ ...sk, gender: "men",   srcIdx: i, pin: config.men.pin[event],   handicap: config.men.handicap }));
+  const womenSkiers = (data.women?.[event]?.[schoolName] || []).map((sk, i) => ({ ...sk, gender: "women", srcIdx: i, pin: config.women.pin[event], handicap: config.women.handicap }));
+  const pooled = [...menSkiers, ...womenSkiers];
+
+  const list = pooled.map((sk, listIdx) => {
+    const score = getEffectiveScore(sk, mode);
+    const pts   = score !== null ? calcConv(score, event, sk.pin, sk.handicap) : null;
+    return { ...sk, listIdx, score, pts, hasActual: sk.actual !== "" };
+  });
+  const valid = list.filter(s => s.pts !== null).sort((a, b) => b.pts - a.pts);
+  const adopted = new Set(valid.slice(0, COMBINED_TOP_N).map(s => s.listIdx));
+  const top = valid.slice(0, COMBINED_TOP_N);
+  const filledActual = pooled.filter(sk => sk.actual !== "").length;
+  return {
+    list, adopted,
+    totalPts: top.length ? top.reduce((a, s) => a + s.pts, 0) : null,
+    filledActual, total: pooled.length,
+  };
+}
+
+function calcCombinedSchoolResult(schoolName, config, mode, data) {
+  const ev = {};
+  let grandTotal = null;
+  for (const e of EVENTS) {
+    ev[e] = calcCombinedEventResult(e, schoolName, config, mode, data);
+    if (ev[e].totalPts !== null) grandTotal = (grandTotal ?? 0) + ev[e].totalPts;
+  }
+  return { ev, grandTotal };
+}
+
+function getCombinedCompletedEvents(config, data) {
+  return EVENTS.filter(e =>
+    SCHOOLS.every(s => {
+      const r = calcCombinedEventResult(e, s, config, "B", data);
+      return r.total > 0 && r.filledActual === r.total;
+    })
+  );
 }
 
 function getCompletedEvents(gender, data) {
@@ -1289,6 +1331,419 @@ function ResultTab({ config, data, gender }) {
   );
 }
 
+function CombinedPlayerPopup({ school, event, mode, config, data, onClose }) {
+  const ecfg = ECFG[event];
+  const result = calcCombinedEventResult(event, school, config, mode, data);
+  const [historyTarget, setHistoryTarget] = useState(null);
+
+  return (
+    <>
+      <div
+        style={{ position: "fixed", inset: 0, zIndex: 300, background: C.overlay, backdropFilter: "blur(6px)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}
+        onClick={onClose}
+      >
+        <div onClick={e => e.stopPropagation()} style={{
+          background: C.surface, border: `1px solid ${ecfg.color}44`,
+          borderRadius: "16px 16px 0 0", width: "100%", maxWidth: 600, padding: "20px 16px 40px",
+        }}>
+          <div style={{ width: 36, height: 4, background: C.border, borderRadius: 2, margin: "0 auto 16px" }} />
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: ecfg.color }}>{ecfg.label}　男女混合</div>
+              <div style={{ fontSize: 12, color: C.muted }}>{school}　{COMBINED_TOP_N}人どり（{result.total}人中）</div>
+            </div>
+            <div style={{ marginLeft: "auto", textAlign: "right" }}>
+              <div style={{ fontSize: 11, color: C.muted }}>チーム合計</div>
+              <div style={{ fontSize: 20, fontWeight: 900, fontFamily: "monospace", color: C.accent }}>
+                {result.totalPts !== null ? `${result.totalPts.toFixed(1)}pt` : "—"}
+              </div>
+            </div>
+            <button onClick={onClose} style={{ background: "none", border: "none", color: C.muted, fontSize: 22, cursor: "pointer", marginLeft: 8 }}>✕</button>
+          </div>
+
+          {result.list.map((sk) => {
+            const isAdopted = result.adopted.has(sk.listIdx);
+            const hasActual = sk.actual !== "";
+            const displayScore = event === "jump" && sk.score !== null
+              ? `${sk.score}m → ${applyHandicap(sk.score, event, sk.handicap)}m`
+              : sk.score !== null ? `${sk.score}${ecfg.unit}` : "—";
+            return (
+              <div key={`${sk.gender}-${sk.srcIdx}`} style={{
+                display: "flex", alignItems: "center", gap: 10,
+                padding: "10px 12px", marginBottom: 8,
+                background: isAdopted ? C.accent + "11" : C.surface2,
+                border: `1px solid ${isAdopted ? C.accent + "44" : C.border}`,
+                borderRadius: 10,
+              }}>
+                <div style={{
+                  width: 24, height: 24, borderRadius: "50%", flexShrink: 0,
+                  background: isAdopted ? C.accent : (sk.gender === "men" ? C.men + "33" : C.women + "33"),
+                  border: `1px solid ${isAdopted ? C.accent : C.border}`,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 12, color: isAdopted ? C.bg : (sk.gender === "men" ? C.men : C.women),
+                }}>{sk.gender === "men" ? "👨" : "👩"}</div>
+
+                <div style={{ flex: 1 }}>
+                  <div
+                    onClick={() => sk.name && setHistoryTarget(sk.name)}
+                    style={{
+                      fontSize: 13, fontWeight: 600,
+                      color: sk.name ? C.text : C.muted,
+                      cursor: sk.name ? "pointer" : "default",
+                      display: "flex", alignItems: "center", gap: 4,
+                    }}
+                  >
+                    {sk.name || "選手"}
+                    {sk.name && (
+                      <span style={{ fontSize: 10, color: C.muted, opacity: 0.7 }}>📋</span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 11, color: C.muted }}>
+                    想定: {sk.planned || "—"}{ecfg.unit}
+                    {event === "slalom" && sk.planned !== "" && ` （${slalomBreakdown(sk.planned, sk.gender)}）`}
+                  </div>
+                </div>
+
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontSize: 13, fontFamily: "monospace", fontWeight: 700, color: hasActual ? ecfg.color : C.muted }}>
+                    {displayScore}
+                    {hasActual && <span style={{ fontSize: 9, color: C.positive, marginLeft: 4 }}>実</span>}
+                  </div>
+                  {event === "slalom" && sk.score !== null && (
+                    <div style={{ fontSize: 10, color: C.muted }}>（{slalomBreakdown(sk.score, sk.gender)}）</div>
+                  )}
+                  <div style={{ fontSize: 12, fontFamily: "monospace", color: isAdopted ? C.accent : C.muted, fontWeight: isAdopted ? 700 : 400 }}>
+                    {sk.pts !== null ? `${sk.pts.toFixed(1)}pt${isAdopted ? " ★" : ""}` : "—"}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+
+          <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ flex: 1, height: 4, background: C.bg, borderRadius: 2, overflow: "hidden" }}>
+              <div style={{
+                height: "100%",
+                width: `${result.total ? result.filledActual / result.total * 100 : 0}%`,
+                background: result.filledActual === result.total ? C.positive : ecfg.color,
+                borderRadius: 2, transition: "width 0.3s",
+              }} />
+            </div>
+            <MiniProgress filled={result.filledActual} total={result.total} color={ecfg.color} />
+          </div>
+        </div>
+      </div>
+
+      {historyTarget && (
+        <PlayerHistoryPopup kanjiInput={historyTarget} onClose={() => setHistoryTarget(null)} />
+      )}
+    </>
+  );
+}
+
+function CombinedDiffTables({ schoolResults, config, completedEvents, data, mode }) {
+  const keio = schoolResults.find(r => r.school === "慶應");
+  const others = schoolResults.filter(r => r.school !== "慶應");
+  const [diffPopup, setDiffPopup] = useState(null);
+  const keioPlannedResult = calcCombinedSchoolResult("慶應", config, "P", data);
+
+  return (
+    <>
+    <div style={{ display: "grid", gap: 12 }}>
+      <div style={{ background: C.surface, border: `1px solid ${C.accent}33`, borderRadius: 12, overflow: "hidden" }}>
+        <SectionHeader title="総合　慶應 vs 各校" color={C.accent} />
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+          <thead>
+            <tr style={{ background: C.bg, borderBottom: `1px solid ${C.border}` }}>
+              <th style={{ padding: "6px 10px", textAlign: "left", color: C.muted, width: "34%" }}>学校</th>
+              <th style={{ padding: "6px 8px", textAlign: "center", color: C.accent }}>換算点差</th>
+              {EVENTS.map(e => (
+                <th key={e} style={{ padding: "4px 4px", textAlign: "center", color: ECFG[e].color, fontSize: 10, whiteSpace: "nowrap" }}>
+                  {ECFG[e].short}{completedEvents.includes(e) ? "✅" : ""}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {others.map(r => {
+              const d = keio.result.grandTotal !== null && r.result.grandTotal !== null ? keio.result.grandTotal - r.result.grandTotal : null;
+              return (
+                <tr key={r.school} style={{ borderBottom: `1px solid ${C.border}` }}>
+                  <td style={{ padding: "8px 10px", fontWeight: 700, color: C.text }}>{r.school}</td>
+                  <td style={{ padding: "8px 8px", textAlign: "center", fontFamily: "monospace", fontWeight: 700, color: diffColor(d) }}>{signStr(d, "pt")}</td>
+                  {EVENTS.map(e => {
+                    const kEv = keio.result.ev[e], rEv = r.result.ev[e];
+                    const dEv = kEv.totalPts !== null && rEv.totalPts !== null ? kEv.totalPts - rEv.totalPts : null;
+                    return (
+                      <td key={e} style={{ padding: "6px 4px", textAlign: "center", fontFamily: "monospace", fontSize: 11, color: dEv === null ? C.muted : ECFG[e].color, whiteSpace: "nowrap" }}>
+                        {dEv === null ? "—" : signStr(dEv)}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+            {(() => {
+              const dPlan = keio.result.grandTotal !== null && keioPlannedResult.grandTotal !== null
+                ? keio.result.grandTotal - keioPlannedResult.grandTotal : null;
+              return (
+                <tr
+                  onClick={() => setDiffPopup({ school: "慶應", event: "slalom" })}
+                  style={{ background: C.accent + "0d", cursor: "pointer" }}
+                >
+                  <td style={{ padding: "8px 10px", fontSize: 11, color: C.muted }}>慶應 想定差 <span style={{ fontSize: 10, color: C.muted }}>▶</span></td>
+                  <td style={{ padding: "8px 8px", textAlign: "center", fontFamily: "monospace", fontWeight: 700, color: diffColor(dPlan) }}>{signStr(dPlan, "pt")}</td>
+                  {EVENTS.map(e => {
+                    const kEv = keio.result.ev[e], pEv = keioPlannedResult.ev[e];
+                    const dEv = kEv.totalPts !== null && pEv.totalPts !== null ? kEv.totalPts - pEv.totalPts : null;
+                    return (
+                      <td key={e} style={{ padding: "6px 4px", textAlign: "center", fontFamily: "monospace", fontSize: 11, color: dEv === null ? C.muted : ECFG[e].color, whiteSpace: "nowrap" }}>
+                        {dEv === null ? "—" : signStr(dEv)}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })()}
+          </tbody>
+        </table>
+      </div>
+
+      {EVENTS.map(e => {
+        const ecfg = ECFG[e];
+        const done = completedEvents.includes(e);
+        const keioPlannedEv = keioPlannedResult.ev[e];
+        const keioActualEv = keio.result.ev[e];
+        const dPts = keioActualEv.totalPts !== null && keioPlannedEv.totalPts !== null
+          ? keioActualEv.totalPts - keioPlannedEv.totalPts : null;
+        return (
+          <div key={e} style={{ background: C.surface, border: `1px solid ${ecfg.color}33`, borderRadius: 12, overflow: "hidden" }}>
+            <SectionHeader title={`${ecfg.label}　慶應 vs 各校${done ? " ✅完了" : ""}`} color={done ? C.positive : ecfg.color} right="換算点差（pt）" />
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+              <thead>
+                <tr style={{ background: C.bg, borderBottom: `1px solid ${C.border}` }}>
+                  <th style={{ padding: "6px 10px", textAlign: "left", color: C.muted, width: "34%" }}>学校</th>
+                  <th style={{ padding: "6px 8px", textAlign: "center", color: C.accent }}>換算点差</th>
+                  <th style={{ padding: "6px 8px", textAlign: "center", color: C.muted, fontSize: 10 }}><div>慶應</div><div>相手</div></th>
+                </tr>
+              </thead>
+              <tbody>
+                {others.map(r => {
+                  const kEv = keio.result.ev[e];
+                  const rEv = r.result.ev[e];
+                  const ptDiff = kEv.totalPts !== null && rEv.totalPts !== null ? kEv.totalPts - rEv.totalPts : null;
+                  return (
+                    <tr key={r.school} style={{ borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}
+                      onClick={() => setDiffPopup({ school: r.school, event: e })}>
+                      <td style={{ padding: "8px 10px", fontWeight: 700, color: C.text }}>{r.school} <span style={{ fontSize: 10, color: C.muted }}>▶</span></td>
+                      <td style={{ padding: "6px 8px", textAlign: "center", fontFamily: "monospace", fontSize: 13, fontWeight: 700, color: diffColor(ptDiff) }}>{signStr(ptDiff, "pt")}</td>
+                      <td style={{ padding: "6px 8px", textAlign: "center", fontSize: 11 }}>
+                        <div style={{ color: C.keio }}>{kEv.filledActual}/{kEv.total}</div>
+                        <div style={{ color: C.muted }}>{rEv.filledActual}/{rEv.total}</div>
+                      </td>
+                    </tr>
+                  );
+                })}
+                <tr
+                  onClick={() => setDiffPopup({ school: "慶應", event: e })}
+                  style={{ background: ecfg.color + "0d", cursor: "pointer" }}
+                >
+                  <td style={{ padding: "8px 10px", fontSize: 11, color: C.muted }}>慶應 想定差 <span style={{ fontSize: 10, color: C.muted }}>▶</span></td>
+                  <td style={{ padding: "6px 8px", textAlign: "center", fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: diffColor(dPts) }}>{signStr(dPts, "pt")}</td>
+                  <td></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        );
+      })}
+    </div>
+
+      {diffPopup && (
+        <CombinedPlayerPopup
+          school={diffPopup.school}
+          event={diffPopup.event || "slalom"}
+          mode={diffPopup.school === "慶應" ? "B" : (mode || "B")}
+          config={config}
+          data={data}
+          onClose={() => setDiffPopup(null)}
+        />
+      )}
+    </>
+  );
+}
+
+function CombinedEventBreakdown({ schoolResults, mode, config, data }) {
+  const [popup, setPopup] = useState(null);
+  return (
+    <div style={{ display: "grid", gap: 12 }}>
+      {EVENTS.map(e => {
+        const ecfg = ECFG[e];
+        const keioPlanned = calcCombinedEventResult(e, "慶應", config, "P", data);
+        const keioActual = schoolResults.find(r => r.school === "慶應")?.result.ev[e];
+        const dPts = keioActual?.totalPts !== null && keioActual?.totalPts !== undefined && keioPlanned.totalPts !== null
+          ? keioActual.totalPts - keioPlanned.totalPts : null;
+        return (
+          <div key={e} style={{ background: C.surface, border: `1px solid ${ecfg.color}33`, borderRadius: 12, overflow: "hidden" }}>
+            <SectionHeader title={`${ecfg.label}　内訳（男女混合）`} color={ecfg.color} right="行をタップで選手詳細 ▶" />
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+              <thead>
+                <tr style={{ background: C.bg, borderBottom: `1px solid ${C.border}` }}>
+                  <th style={{ padding: "6px 10px", textAlign: "left", color: C.muted }}>学校</th>
+                  <th style={{ padding: "6px 8px", textAlign: "center", color: C.accent }}>換算pt（{COMBINED_TOP_N}人どり）</th>
+                  <th style={{ padding: "6px 8px", textAlign: "center", color: C.muted, fontSize: 10 }}>入力</th>
+                </tr>
+              </thead>
+              <tbody>
+                {schoolResults.map(({ school, result }) => {
+                  const ev = result.ev[e];
+                  return (
+                    <tr key={school} onClick={() => setPopup({ school, event: e })} style={{ borderBottom: `1px solid ${C.border}`, background: school === "慶應" ? C.keio + "11" : "transparent", cursor: "pointer" }}>
+                      <td style={{ padding: "10px 10px", fontWeight: school === "慶應" ? 700 : 400, color: school === "慶應" ? C.keio : C.text }}>
+                        {school} <span style={{ fontSize: 10, color: C.muted }}>▶</span>
+                      </td>
+                      <td style={{ padding: "10px 8px", textAlign: "center", fontFamily: "monospace", color: C.accent, fontWeight: 700 }}>
+                        {ev.totalPts !== null ? `${ev.totalPts.toFixed(1)}pt` : "—"}
+                      </td>
+                      <td style={{ padding: "10px 8px", textAlign: "center" }}>
+                        <MiniProgress filled={ev.filledActual} total={ev.total} color={ecfg.color} />
+                      </td>
+                    </tr>
+                  );
+                })}
+                <tr onClick={() => setPopup({ school: "慶應", event: e })} style={{ background: C.accent + "0d", cursor: "pointer" }}>
+                  <td style={{ padding: "8px 10px", fontSize: 11, color: C.muted }}>
+                    慶應 想定差 <span style={{ fontSize: 10, color: C.muted }}>▶</span>
+                  </td>
+                  <td style={{ padding: "8px 8px", textAlign: "center", fontFamily: "monospace", fontWeight: 700, color: diffColor(dPts) }}>
+                    {signStr(dPts, "pt")}
+                  </td>
+                  <td></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        );
+      })}
+      {popup && <CombinedPlayerPopup school={popup.school} event={popup.event} mode="B" config={config} data={data} onClose={() => setPopup(null)} />}
+    </div>
+  );
+}
+
+function CombinedPlannedBreakdown({ config, data }) {
+  const [popup, setPopup] = useState(null);
+  return (
+    <div style={{ display: "grid", gap: 12 }}>
+      <div style={{
+        background: C.accent + "11", border: `1px solid ${C.accent}44`, borderRadius: 10,
+        padding: "10px 14px", fontSize: 11, color: C.accent, display: "flex", alignItems: "center", gap: 8,
+      }}>
+        📌 このタブは想定値のみで計算した参考表示です。行をタップで選手別の想定内訳が見られます。
+      </div>
+      {EVENTS.map(e => {
+        const ecfg = ECFG[e];
+        const schoolResults = SCHOOLS.map(school => ({
+          school,
+          result: calcCombinedEventResult(e, school, config, "P", data),
+        }));
+        return (
+          <div key={e} style={{ background: C.surface, border: `1px solid ${ecfg.color}33`, borderRadius: 12, overflow: "hidden" }}>
+            <SectionHeader title={`${ecfg.icon} ${ecfg.label}　想定内訳（男女混合）`} color={ecfg.color} right="行をタップで選手詳細 ▶" />
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+              <thead>
+                <tr style={{ background: C.bg, borderBottom: `1px solid ${C.border}` }}>
+                  <th style={{ padding: "6px 10px", textAlign: "left", color: C.muted }}>学校</th>
+                  <th style={{ padding: "6px 8px", textAlign: "center", color: C.accent }}>想定換算pt</th>
+                </tr>
+              </thead>
+              <tbody>
+                {schoolResults.map(({ school, result }) => (
+                  <tr key={school} onClick={() => setPopup({ school, event: e })} style={{ borderBottom: `1px solid ${C.border}`, background: school === "慶應" ? C.keio + "11" : "transparent", cursor: "pointer" }}>
+                    <td style={{ padding: "10px 10px", fontWeight: school === "慶應" ? 700 : 400, color: school === "慶應" ? C.keio : C.text }}>
+                      {school} <span style={{ fontSize: 10, color: C.muted }}>▶</span>
+                    </td>
+                    <td style={{ padding: "10px 8px", textAlign: "center", fontFamily: "monospace", color: C.accent, fontWeight: 700 }}>
+                      {result.totalPts !== null ? `${result.totalPts.toFixed(1)}pt` : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      })}
+      {popup && <CombinedPlayerPopup school={popup.school} event={popup.event} mode="P" config={config} data={data} onClose={() => setPopup(null)} />}
+    </div>
+  );
+}
+
+function CombinedTab({ config, data }) {
+  const [mode, setMode] = useState("B");
+  const [view, setView] = useState("diff");
+  const schoolResults = SCHOOLS.map(school => ({ school, result: calcCombinedSchoolResult(school, config, mode, data) }));
+  const completedEvents = getCombinedCompletedEvents(config, data);
+
+  return (
+    <div>
+      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 12, marginBottom: 14 }}>
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          {[{ key: "A", title: "Aモード", sub: "入力済みのみ" }, { key: "B", title: "Bモード", sub: "実際＋想定混在" }].map(m => (
+            <button key={m.key} onClick={() => setMode(m.key)} style={{ flex: 1, background: mode === m.key ? C.accent + "22" : C.surface2, border: `1px solid ${mode === m.key ? C.accent : C.border}`, borderRadius: 8, color: mode === m.key ? C.accent : C.muted, fontSize: 13, fontWeight: mode === m.key ? 700 : 400, padding: "8px 10px", cursor: "pointer" }}>
+              <div>{m.title}</div><div style={{ fontSize: 10, marginTop: 2 }}>{m.sub}</div>
+            </button>
+          ))}
+        </div>
+        <div style={{ fontSize: 10, color: C.muted, marginBottom: 6 }}>入力進捗（男女混合・種目ごとに上位{COMBINED_TOP_N}人採用）</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+          {EVENTS.map(e => {
+            const ecfg = ECFG[e];
+            const done = completedEvents.includes(e);
+            return (
+              <div key={e}>
+                <div style={{ fontSize: 10, color: done ? C.positive : ecfg.color, marginBottom: 4 }}>{ecfg.label}{done ? " ✅" : ""}</div>
+                {SCHOOLS.map(s => {
+                  const r = calcCombinedEventResult(e, s, config, mode, data);
+                  const f = r.filledActual, t = r.total;
+                  const sdone = f === t && t > 0;
+                  return (
+                    <div key={s} style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 3 }}>
+                      <div style={{ fontSize: 10, color: s === "慶應" ? C.keio : C.muted, width: 38, flexShrink: 0 }}>{s}</div>
+                      <div style={{ flex: 1, height: 3, background: C.bg, borderRadius: 2, overflow: "hidden" }}>
+                        <div style={{ height: "100%", width: `${t ? f / t * 100 : 0}%`, background: sdone ? C.positive : ecfg.color, borderRadius: 2 }} />
+                      </div>
+                      <div style={{ fontSize: 10, color: sdone ? C.positive : C.muted, fontFamily: "monospace", width: 22, textAlign: "right" }}>{f}/{t}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 6, marginBottom: 14 }}>
+        {schoolResults.map(({ school, result }) => (
+          <div key={school} style={{ background: school === "慶應" ? C.keio + "22" : C.surface, border: `1px solid ${school === "慶應" ? C.keio : C.border}`, borderRadius: 10, padding: "8px 4px", textAlign: "center" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: school === "慶應" ? C.keio : C.text, marginBottom: 4 }}>{school}</div>
+            <div style={{ fontSize: 16, fontWeight: 900, fontFamily: "monospace", color: school === "慶應" ? C.keio : C.text }}>{result.grandTotal !== null ? result.grandTotal.toFixed(1) : "—"}</div>
+            <div style={{ fontSize: 9, color: C.muted }}>pt</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+        {[{ key: "diff", label: "📉 差分分析" }, { key: "breakdown", label: "📋 種目別内訳" }, { key: "planned", label: "📌 想定" }].map(v => (
+          <button key={v.key} onClick={() => setView(v.key)} style={{ flex: 1, background: view === v.key ? C.surface : C.surface2, border: `1px solid ${view === v.key ? C.accent : C.border}`, borderRadius: 8, color: view === v.key ? C.accent : C.muted, fontSize: 13, fontWeight: view === v.key ? 700 : 400, padding: "8px", cursor: "pointer" }}>{v.label}</button>
+        ))}
+      </div>
+
+      {view === "diff" && <CombinedDiffTables schoolResults={schoolResults} config={config} completedEvents={completedEvents} data={data} mode={mode} />}
+      {view === "breakdown" && <CombinedEventBreakdown schoolResults={schoolResults} mode={mode} config={config} data={data} />}
+      {view === "planned" && <CombinedPlannedBreakdown config={config} data={data} />}
+    </div>
+  );
+}
+
 function StartlistTab() {
   const [url, setUrl] = useState("");
   const [inputUrl, setInputUrl] = useState("");
@@ -1466,7 +1921,7 @@ export default function App() {
   const [tab, setTab] = useState("result");
   const tabRef = useRef("result");
   useEffect(() => { tabRef.current = tab; }, [tab]);
-  const [gender, setGender] = useState("men");
+  const [gender, setGender] = useState("combined");
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const saveTimers = useRef({});
@@ -1575,12 +2030,12 @@ export default function App() {
           </div>
           {tab !== "sokuho" && (
             <div style={{ display: "flex", gap: 6, marginTop: 10, marginBottom: 6 }}>
-              {[{ key: "men", label: "👨 男子", color: C.men }, { key: "women", label: "👩 女子", color: C.women }].map(g => (
+              {[{ key: "combined", label: "🤝 男女", color: C.accent }, { key: "men", label: "👨 男子", color: C.men }, { key: "women", label: "👩 女子", color: C.women }].map(g => (
                 <button key={g.key} onClick={() => setGender(g.key)} style={{ flex: 1, background: gender === g.key ? g.color + "22" : "transparent", border: `1px solid ${gender === g.key ? g.color : C.border}`, borderRadius: 8, color: gender === g.key ? g.color : C.muted, fontSize: 13, fontWeight: gender === g.key ? 700 : 400, padding: "6px", cursor: "pointer", transition: "all 0.2s" }}>{g.label}</button>
               ))}
             </div>
           )}
-          <div style={{ display: "flex", borderBottom: `1px solid ${C.border}`, marginTop: tab === "sokuho" ? 10 : 0 }}>
+          <div style={{ display: "flex", borderBottom: `1px solid ${C.border}`, marginTop: tab === "sokuho" ? 10 : 0, overflowX: "auto" }}>
             <AppTab label="⚙️ 設定" active={tab === "settings"} onClick={() => setTab("settings")} />
             <AppTab label="📝 入力" active={tab === "input"}    onClick={() => setTab("input")} />
             <AppTab label="📊 結果" active={tab === "result"}   onClick={() => setTab("result")} />
@@ -1597,9 +2052,15 @@ export default function App() {
             <div style={{ fontSize: 14 }}>データを読み込んでいます...</div>
           </div>
         )}
-                {!loading && tab === "settings" && <SettingsTab config={config} setConfig={setConfig} onReset={handleReset} onSave={handleSaveConfig} saving={configSaving} saved={configSaved} gender={gender} onResetActuals={handleResetActuals} resettingActuals={resettingActuals} actualsReset={actualsReset} />}
-        {!loading && tab === "input"    && <InputTab config={config} data={data} setData={setData} gender={gender} saveSkierDebounced={saveSkierDebounced} />}
-        {!loading && tab === "result"   && <ResultTab config={config} data={data} gender={gender} />}
+                {!loading && tab === "settings" && (gender === "combined"
+          ? <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 20, textAlign: "center", color: C.muted, fontSize: 13 }}>⚙️ 設定は「👨男子」「👩女子」を選んでから変更してください</div>
+          : <SettingsTab config={config} setConfig={setConfig} onReset={handleReset} onSave={handleSaveConfig} saving={configSaving} saved={configSaved} gender={gender} onResetActuals={handleResetActuals} resettingActuals={resettingActuals} actualsReset={actualsReset} />)}
+        {!loading && tab === "input" && (gender === "combined"
+          ? <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 20, textAlign: "center", color: C.muted, fontSize: 13 }}>📝 入力は「👨男子」「👩女子」を選んでから行ってください</div>
+          : <InputTab config={config} data={data} setData={setData} gender={gender} saveSkierDebounced={saveSkierDebounced} />)}
+        {!loading && tab === "result" && (gender === "combined"
+          ? <CombinedTab config={config} data={data} />
+          : <ResultTab config={config} data={data} gender={gender} />)}
         {tab === "startlist"            && <StartlistTab />}
         {tab === "sokuho"               && <SokuhoTab />}
       </div>

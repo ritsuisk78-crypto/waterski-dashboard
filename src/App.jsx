@@ -259,10 +259,10 @@ const COMP_ORDER = ["cs1_2025","cs2_2025","inkare_2025","shinjin_2025","cs1_2026
 
 const COMP_SHORT = {
   cs1_2025:"CS1'25", cs2_2025:"CS2'25",
-  inkare_2025:"全日'25", shinjin_2025:"新人'25",
+  inkare_2025:"インカレ'25", shinjin_2025:"新人'25",
   cs1_2026:"CS1'26", cs2_2026:"CS2'26", kizuna_2026:"絆'26", hogaku_2026:"法学戦'26",
   asaichi1_2026:"朝一①'26", asaichi2_2026:"朝一②'26", asaichi3_2026:"朝一③'26", asaichi4_2026:"朝一④'26", biwa_2026:"琵琶湖'26",
-  inkare_2026:"全日'26",
+  inkare_2026:"インカレ'26",
 };
 
 const DEFAULT_CONFIG = {
@@ -966,7 +966,7 @@ function InputTab({ config, data, setData, gender, saveSkierDebounced }) {
         const pts = score !== null ? calcConv(score, event, cfg.pin[event], cfg.handicap) : null;
         return (
           <div key={i} style={{ background: C.surface, border: `1px solid ${hasActual ? ecfg.color + "55" : C.border}`, borderRadius: 10, padding: 14, marginBottom: 10 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
               <div style={{ background: hasActual ? ecfg.color : C.surface2, borderRadius: "50%", width: 26, height: 26, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: hasActual ? C.bg : C.muted }}>
                 {i + 1}
               </div>
@@ -974,7 +974,7 @@ function InputTab({ config, data, setData, gender, saveSkierDebounced }) {
                 value={sk.name}
                 onChange={e => updateSkier(i, "name", e.target.value)}
                 placeholder={`選手${i + 1}（例: 内藤駿（3））`}
-                style={{ background: "transparent", border: "none", borderBottom: `1px solid ${C.border}`, color: C.text, fontSize: 16, fontWeight: 700, padding: "2px 0", outline: "none", flex: 1 }}
+                style={{ background: "transparent", border: "none", borderBottom: `1px solid ${C.border}`, color: C.text, fontSize: 16, fontWeight: 700, padding: "2px 0", outline: "none", flex: 1, minWidth: 80 }}
               />
               {sk.name && (
                 <button
